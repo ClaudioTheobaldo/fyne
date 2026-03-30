@@ -326,6 +326,10 @@ func (c *mobileContext) TexImage2D(target uint32, level, width, height int, colo
 	)
 }
 
+func (c *mobileContext) TexSubImage2D(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32, data []uint8) {
+	c.glContext.TexSubImage2D(gl.Enum(target), level, xOffset, yOffset, width, height, gl.Enum(colorFormat), gl.Enum(typ), data)
+}
+
 func (c *mobileContext) TexParameteri(target, param uint32, value int32) {
 	c.glContext.TexParameteri(gl.Enum(target), gl.Enum(param), int(value))
 }

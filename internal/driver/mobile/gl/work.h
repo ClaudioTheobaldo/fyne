@@ -75,6 +75,7 @@ typedef enum {
 	glfnScissor,
 	glfnShaderSource,
 	glfnTexImage2D,
+	glfnTexSubImage2D,
 	glfnTexParameteri,
 	glfnUniform1f,
 	glfnUniform2f,

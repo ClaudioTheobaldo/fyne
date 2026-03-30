@@ -331,6 +331,10 @@ func (c *coreContext) TexImage2D(target uint32, level, width, height int, colorF
 	)
 }
 
+func (c *coreContext) TexSubImage2D(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32, data []uint8) {
+	gl.TexSubImage2D(target, int32(level), int32(xOffset), int32(yOffset), int32(width), int32(height), colorFormat, typ, gl.Ptr(data))
+}
+
 func (c *coreContext) TexParameteri(target, param uint32, value int32) {
 	gl.TexParameteri(target, param, value)
 }

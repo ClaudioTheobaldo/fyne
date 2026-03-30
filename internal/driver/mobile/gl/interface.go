@@ -199,6 +199,11 @@ type Context interface {
 	// http://www.khronos.org/opengles/sdk/docs/man3/html/glTexImage2D.xhtml
 	TexImage2D(target Enum, level int, internalFormat int, width, height int, format Enum, ty Enum, data []byte)
 
+	// TexSubImage2D updates a portion of a 2D texture image with new data.
+	//
+	// http://www.khronos.org/opengles/sdk/docs/man3/html/glTexSubImage2D.xhtml
+	TexSubImage2D(target Enum, level int, xOffset, yOffset, width, height int, format Enum, ty Enum, data []byte)
+
 	// TexParameteri sets an integer texture parameter.
 	//
 	// http://www.khronos.org/opengles/sdk/docs/man3/html/glTexParameter.xhtml

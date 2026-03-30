@@ -386,6 +386,11 @@ func (c *Canvas) focusManager() *app.FocusManager {
 }
 
 func (c *Canvas) freeObject(object fyne.CanvasObject) {
+	// StreamingImage manages its own texture lifecycle via TexSubImage2D.
+	if _, ok := object.(*canvas.StreamingImage); ok {
+		return
+	}
+
 	// Image.Refresh will trigger a refresh specific to the object,
 	// while recursing on parent widget would just lead to a double texture upload.
 	if img, ok := object.(*canvas.Image); ok {

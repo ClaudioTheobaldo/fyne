@@ -3,11 +3,26 @@ package gl
 import (
 	"image/color"
 	"math"
+	"sync/atomic"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/internal/cache"
 	paint "fyne.io/fyne/v2/internal/painter"
 )
+
+// BenchImageDrawNs accumulates nanoseconds spent in drawImage (for benchmarking).
+var BenchImageDrawNs atomic.Int64
+
+// BenchStreamDrawNs accumulates nanoseconds spent in drawStreamingImage (for benchmarking).
+var BenchStreamDrawNs atomic.Int64
+
+// BenchImageDrawCount counts drawImage invocations (for benchmarking).
+var BenchImageDrawCount atomic.Int64
+
+// BenchStreamDrawCount counts drawStreamingImage invocations (for benchmarking).
+var BenchStreamDrawCount atomic.Int64
 
 const edgeSoftness = 1.0
 
@@ -77,7 +92,10 @@ func (p *painter) drawGradient(o fyne.CanvasObject, texCreator func(fyne.CanvasO
 }
 
 func (p *painter) drawImage(img *canvas.Image, pos fyne.Position, frame fyne.Size) {
+	t0 := time.Now()
 	p.drawTextureWithDetails(img, p.newGlImageTexture, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()), 0)
+	BenchImageDrawNs.Add(time.Since(t0).Nanoseconds())
+	BenchImageDrawCount.Add(1)
 }
 
 func (p *painter) drawLine(line *canvas.Line, pos fyne.Position, frame fyne.Size) {
@@ -106,6 +124,8 @@ func (p *painter) drawLine(line *canvas.Line, pos fyne.Position, frame fyne.Size
 
 func (p *painter) drawObject(o fyne.CanvasObject, pos fyne.Position, frame fyne.Size) {
 	switch obj := o.(type) {
+	case *canvas.StreamingImage:
+		p.drawStreamingImage(obj, pos, frame)
 	case *canvas.Circle:
 		p.drawCircle(obj, pos, frame)
 	case *canvas.Line:
@@ -367,6 +387,79 @@ func (p *painter) drawText(text *canvas.Text, pos fyne.Position, frame fyne.Size
 	size.Height = roundToPixel(size.Height, p.pixScale)
 	size.Width += roundToPixel(paint.VectorPad(text), p.pixScale)
 	p.drawTextureWithDetails(text, p.newGlTextTexture, pos, size, frame, canvas.ImageFillStretch, 1.0, 0)
+}
+
+func (p *painter) drawStreamingImage(img *canvas.StreamingImage, pos fyne.Position, frame fyne.Size) {
+	t0 := time.Now()
+	defer func() {
+		BenchStreamDrawNs.Add(time.Since(t0).Nanoseconds())
+		BenchStreamDrawCount.Add(1)
+	}()
+
+	newFrame := img.ConsumePendingFrame()
+	existingTex, cached := cache.GetTexture(img)
+
+	var texture Texture
+	if newFrame != nil {
+		w := newFrame.Rect.Dx()
+		h := newFrame.Rect.Dy()
+		texW, texH := img.TextureSize()
+
+		if cached && w == texW && h == texH {
+			// Fast path: same dimensions, update pixels in-place
+			texture = Texture(existingTex)
+			p.ctx.ActiveTexture(texture0)
+			p.ctx.BindTexture(texture2D, texture)
+			p.ctx.TexSubImage2D(texture2D, 0, 0, 0, w, h, colorFormatRGBA, unsignedByte, newFrame.Pix)
+			p.logError()
+		} else {
+			// Slow path: dimensions changed or first frame — (re)allocate texture
+			if cached {
+				p.ctx.DeleteTexture(Texture(existingTex))
+				cache.DeleteTexture(img)
+			}
+			texture = p.imgToTexture(newFrame, img.ScaleMode)
+			cache.SetTexture(img, cache.TextureType(texture), p.canvas)
+			img.SetTextureSize(w, h)
+		}
+	} else if cached {
+		// No new frame, redraw with existing texture
+		texture = Texture(existingTex)
+	} else {
+		// No frame ever provided
+		return
+	}
+
+	p.drawQuadWithTexture(texture, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()), 0, 0)
+}
+
+func (p *painter) drawQuadWithTexture(texture Texture, pos fyne.Position, size, frame fyne.Size,
+	fill canvas.ImageFill, alpha, cornerRadius, pad float32,
+) {
+	points, insets := p.rectCoords(size, pos, frame, fill, 0, pad)
+	inner, _ := rectInnerCoords(size, pos, fill, 0)
+
+	p.ctx.UseProgram(p.program.ref)
+	p.updateBuffer(p.program.buff, points)
+	p.UpdateVertexArray(p.program, "vert", 3, 5, 0)
+	p.UpdateVertexArray(p.program, "vertTexCoord", 2, 5, 3)
+
+	cornerRadius = fyne.Min(paint.GetMaximumRadius(size), cornerRadius)
+	p.SetUniform1f(p.program, "cornerRadius", cornerRadius*p.pixScale)
+	p.SetUniform2f(p.program, "size", inner.Width*p.pixScale, inner.Height*p.pixScale)
+	p.SetUniform4f(p.program, "inset", insets[0], insets[1], insets[2], insets[3])
+
+	p.SetUniform1f(p.program, "alpha", alpha)
+
+	p.ctx.BlendFunc(one, oneMinusSrcAlpha)
+	p.logError()
+
+	p.ctx.ActiveTexture(texture0)
+	p.ctx.BindTexture(texture2D, texture)
+	p.logError()
+
+	p.ctx.DrawArrays(triangleStrip, 0, 4)
+	p.logError()
 }
 
 func (p *painter) drawTextureWithDetails(o fyne.CanvasObject, creator func(canvasObject fyne.CanvasObject) Texture,

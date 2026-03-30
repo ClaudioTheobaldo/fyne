@@ -469,6 +469,29 @@ func (ctx *context) TexImage2D(target Enum, level int, internalFormat int, width
 	})
 }
 
+func (ctx *context) TexSubImage2D(target Enum, level int, xOffset, yOffset, width, height int, format Enum, ty Enum, data []byte) {
+	parg := unsafe.Pointer(nil)
+	if len(data) > 0 {
+		parg = unsafe.Pointer(&data[0])
+	}
+
+	ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnTexSubImage2D,
+			a0: target.c(),
+			a1: uintptr(level),
+			a2: uintptr(xOffset),
+			a3: uintptr(yOffset),
+			a4: uintptr(width),
+			a5: uintptr(height),
+			a6: format.c(),
+			a7: ty.c(),
+		},
+		parg:     parg,
+		blocking: parg != nil,
+	})
+}
+
 func (ctx *context) TexParameteri(target, pname Enum, param int) {
 	ctx.enqueue(call{
 		args: fnargs{
