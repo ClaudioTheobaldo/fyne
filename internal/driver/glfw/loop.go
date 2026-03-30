@@ -1,7 +1,9 @@
 package glfw
 
 import (
+	"os"
 	"runtime"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -124,7 +126,11 @@ func (d *gLDriver) runGL() {
 		f()
 	}
 
-	eventTick := time.NewTicker(time.Second / 60)
+	tickRate := 60
+	if v, err := strconv.Atoi(os.Getenv("FYNE_TICK_RATE")); err == nil && v > 0 {
+		tickRate = v
+	}
+	eventTick := time.NewTicker(time.Second / time.Duration(tickRate))
 	for {
 		select {
 		case <-d.done:

@@ -4,6 +4,7 @@ package gl
 
 import (
 	"strings"
+	"unsafe"
 
 	gl "github.com/go-gl/gl/v3.1/gles2"
 
@@ -194,6 +195,10 @@ func (c *esContext) BufferData(target uint32, points []float32, usage uint32) {
 	gl.BufferData(target, 4*len(points), gl.Ptr(points), usage)
 }
 
+func (c *esContext) BufferDataBytes(target uint32, size int, data []uint8, usage uint32) {
+	// PBOs not supported on GLES2
+}
+
 func (c *esContext) BufferSubData(target uint32, points []float32) {
 	gl.BufferSubData(target, 0, 4*len(points), gl.Ptr(points))
 }
@@ -299,6 +304,10 @@ func (c *esContext) LinkProgram(program Program) {
 	gl.LinkProgram(uint32(program))
 }
 
+func (c *esContext) MapBuffer(target, access uint32) unsafe.Pointer {
+	return nil // PBOs not supported on GLES2
+}
+
 func (c *esContext) ReadBuffer(src uint32) {
 	gl.ReadBuffer(src)
 }
@@ -331,12 +340,24 @@ func (c *esContext) TexImage2D(target uint32, level, width, height int, colorFor
 	)
 }
 
+func (c *esContext) TexImage2DPBO(target uint32, level, width, height int, colorFormat, typ uint32) {
+	// PBOs not supported on GLES2
+}
+
 func (c *esContext) TexSubImage2D(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32, data []uint8) {
 	gl.TexSubImage2D(target, int32(level), int32(xOffset), int32(yOffset), int32(width), int32(height), colorFormat, typ, gl.Ptr(data))
 }
 
+func (c *esContext) TexSubImage2DPBO(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32) {
+	// PBOs not supported on GLES2
+}
+
 func (c *esContext) TexParameteri(target, param uint32, value int32) {
 	gl.TexParameteri(target, param, value)
+}
+
+func (c *esContext) UnmapBuffer(target uint32) bool {
+	return false // PBOs not supported on GLES2
 }
 
 func (c *esContext) Uniform1f(uniform Uniform, v float32) {

@@ -1,16 +1,18 @@
-// streaming_bench benchmarks canvas.Image vs canvas.StreamingImage.
+// streaming_bench benchmarks 4 frame upload strategies:
 //
-// Measures actual time inside GL draw functions (instrumented).
-// Test 1: Single 1080p stream — baseline.
-// Test 2: Single 4K stream — stresses GPU memory bandwidth.
-// Test 3: 4x 1080p streams — simulates multi-camera view.
-// Test 4: Shifting resolutions — 10 seconds, resolution changes every second.
+//  1. canvas.Image          — delete + create + TexImage2D from CPU (baseline)
+//  2. TexSubImage2D only    — reuse texture, sync CPU→GPU copy
+//  3. PBO only              — new texture each frame, async DMA from PBO
+//  4. PBO + TexSubImage2D   — reuse texture + async DMA from PBO
+//
+// Tests: single 1080p, single 4K, 4x 1080p multi-cam, shifting resolutions.
 package main
 
 import (
 	"fmt"
 	"image"
 	"math/rand"
+	"os"
 	"runtime"
 	"time"
 
@@ -33,32 +35,20 @@ func generateFrame(w, h int, seed byte) *image.RGBA {
 	return img
 }
 
-type testResult struct {
-	label     string
-	drawCount int64
-	drawNs    int64
-	wallTime  time.Duration
+type result struct {
+	draws int64
+	ns    int64
 }
 
-func (r testResult) avgDrawUs() float64 {
-	if r.drawCount == 0 {
+func (r result) avgUs() float64 {
+	if r.draws == 0 {
 		return 0
 	}
-	return float64(r.drawNs) / float64(r.drawCount) / 1000.0
+	return float64(r.ns) / float64(r.draws) / 1000.0
 }
 
-func (r testResult) actualFps() float64 {
-	if r.wallTime == 0 {
-		return 0
-	}
-	return float64(r.drawCount) / r.wallTime.Seconds()
-}
-
-func resetCounters() {
-	glpainter.BenchImageDrawNs.Store(0)
-	glpainter.BenchImageDrawCount.Store(0)
-	glpainter.BenchStreamDrawNs.Store(0)
-	glpainter.BenchStreamDrawCount.Store(0)
+func (r result) totalMs() float64 {
+	return float64(r.ns) / 1e6
 }
 
 func pregenFrames(resolutions []image.Point, count int) map[image.Point][]*image.RGBA {
@@ -76,6 +66,13 @@ func pregenFrames(resolutions []image.Point, count int) map[image.Point][]*image
 	return pools
 }
 
+func resetCounters() {
+	glpainter.BenchImageDrawNs.Store(0)
+	glpainter.BenchImageDrawCount.Store(0)
+	glpainter.BenchStreamDrawNs.Store(0)
+	glpainter.BenchStreamDrawCount.Store(0)
+}
+
 type benchConfig struct {
 	name           string
 	duration       time.Duration
@@ -84,10 +81,68 @@ type benchConfig struct {
 	changeInterval time.Duration
 }
 
-func runBench(w fyne.Window, cfg benchConfig) (imgResult, stmResult testResult) {
-	fmt.Printf("\n--- %s ---\n", cfg.name)
+// pushFrames runs the main benchmark loop, pushing frames for the given duration.
+func pushFrames(duration time.Duration, resolutions []image.Point, changeInterval time.Duration, pools map[image.Point][]*image.RGBA, pushFn func(*image.RGBA)) {
+	resIdx := 0
+	currentRes := resolutions[0]
+	lastResChange := time.Now()
+	start := time.Now()
+	var count int64
+
+	for time.Since(start) < duration {
+		if len(resolutions) > 1 && changeInterval > 0 && time.Since(lastResChange) >= changeInterval {
+			resIdx = (resIdx + 1) % len(resolutions)
+			currentRes = resolutions[resIdx]
+			lastResChange = time.Now()
+		}
+		pool := pools[currentRes]
+		frame := pool[count%int64(len(pool))]
+
+		fyne.DoAndWait(func() {
+			pushFn(frame)
+		})
+		count++
+	}
+}
+
+func runVariant(w fyne.Window, label string, cfg benchConfig, pools map[image.Point][]*image.RGBA, setup func() (fyne.CanvasObject, func(*image.RGBA)), useImageCounter bool) result {
+	fmt.Printf("    %-24s ", label+"...")
+
+	obj, pushFn := setup()
+
+	statusLabel := widget.NewLabel(label)
+	content := container.NewBorder(statusLabel, nil, nil, nil, obj)
+	fyne.DoAndWait(func() {
+		w.SetContent(content)
+		w.SetTitle("Bench: " + label)
+	})
+	runtime.GC()
+	resetCounters()
+
+	done := make(chan result)
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		pushFrames(cfg.duration, cfg.resolutions, cfg.changeInterval, pools, pushFn)
+		time.Sleep(100 * time.Millisecond) // let final paint complete
+
+		var r result
+		if useImageCounter {
+			r = result{draws: glpainter.BenchImageDrawCount.Load(), ns: glpainter.BenchImageDrawNs.Load()}
+		} else {
+			r = result{draws: glpainter.BenchStreamDrawCount.Load(), ns: glpainter.BenchStreamDrawNs.Load()}
+		}
+		done <- r
+	}()
+
+	r := <-done
+	fmt.Printf("%5d draws | avg %8.1f us | total %7.1f ms\n", r.draws, r.avgUs(), r.totalMs())
+	return r
+}
+
+func runTest(w fyne.Window, cfg benchConfig) [4]result {
+	fmt.Printf("\n=== %s ===\n", cfg.name)
 	if len(cfg.resolutions) > 1 {
-		fmt.Printf("  Resolutions: ")
+		fmt.Printf("    Resolutions: ")
 		for i, r := range cfg.resolutions {
 			if i > 0 {
 				fmt.Printf(" -> ")
@@ -96,172 +151,117 @@ func runBench(w fyne.Window, cfg benchConfig) (imgResult, stmResult testResult) 
 		}
 		fmt.Println()
 	} else {
-		fmt.Printf("  Resolution: %dx%d  Streams: %d\n", cfg.resolutions[0].X, cfg.resolutions[0].Y, cfg.numStreams)
+		fmt.Printf("    Resolution: %dx%d  Streams: %d\n", cfg.resolutions[0].X, cfg.resolutions[0].Y, cfg.numStreams)
 	}
 
 	pools := pregenFrames(cfg.resolutions, 16)
 	runtime.GC()
 
-	// --- canvas.Image ---
-	fmt.Println("  Running canvas.Image...")
-	{
-		statusLabel := widget.NewLabel("canvas.Image...")
+	var results [4]result
+
+	// 1. canvas.Image (baseline)
+	results[0] = runVariant(w, "canvas.Image", cfg, pools, func() (fyne.CanvasObject, func(*image.RGBA)) {
 		images := make([]*canvas.Image, cfg.numStreams)
-		containers := make([]fyne.CanvasObject, cfg.numStreams)
+		objs := make([]fyne.CanvasObject, cfg.numStreams)
 		for i := range images {
 			images[i] = canvas.NewImageFromImage(pools[cfg.resolutions[0]][0])
 			images[i].FillMode = canvas.ImageFillStretch
 			images[i].ScaleMode = canvas.ImageScaleFastest
-			containers[i] = images[i]
+			objs[i] = images[i]
 		}
-
-		grid := container.NewGridWithColumns(max(1, cfg.numStreams/max(1, (cfg.numStreams+1)/2)), containers...)
-		content := container.NewBorder(statusLabel, nil, nil, nil, grid)
-		fyne.DoAndWait(func() {
-			w.SetContent(content)
-			w.SetTitle(fmt.Sprintf("Bench: canvas.Image - %s", cfg.name))
-		})
-		resetCounters()
-
-		done := make(chan struct{})
-		go func() {
-			time.Sleep(300 * time.Millisecond)
-			resIdx := 0
-			currentRes := cfg.resolutions[0]
-			lastResChange := time.Now()
-			start := time.Now()
-			var pushCount int64
-
-			for time.Since(start) < cfg.duration {
-				if len(cfg.resolutions) > 1 && cfg.changeInterval > 0 && time.Since(lastResChange) >= cfg.changeInterval {
-					resIdx = (resIdx + 1) % len(cfg.resolutions)
-					currentRes = cfg.resolutions[resIdx]
-					lastResChange = time.Now()
-				}
-
-				pool := pools[currentRes]
-				frame := pool[pushCount%int64(len(pool))]
-
-				fyne.DoAndWait(func() {
-					for _, img := range images {
-						img.Image = frame
-						img.Refresh()
-					}
-				})
-				pushCount++
+		grid := container.NewGridWithColumns(max(1, cfg.numStreams), objs...)
+		return grid, func(frame *image.RGBA) {
+			for _, img := range images {
+				img.Image = frame
+				img.Refresh()
 			}
-
-			close(done)
-		}()
-		<-done
-		time.Sleep(100 * time.Millisecond) // let final paint complete
-
-		imgResult = testResult{
-			label:     "canvas.Image",
-			drawCount: glpainter.BenchImageDrawCount.Load(),
-			drawNs:    glpainter.BenchImageDrawNs.Load(),
-			wallTime:  cfg.duration,
 		}
-	}
+	}, true)
 
-	// --- StreamingImage ---
-	fmt.Println("  Running StreamingImage...")
-	{
-		statusLabel := widget.NewLabel("StreamingImage...")
+	// 2. TexSubImage2D only (no PBO, reuse texture)
+	results[1] = runVariant(w, "TexSubImage2D only", cfg, pools, func() (fyne.CanvasObject, func(*image.RGBA)) {
 		streams := make([]*canvas.StreamingImage, cfg.numStreams)
-		containers := make([]fyne.CanvasObject, cfg.numStreams)
+		objs := make([]fyne.CanvasObject, cfg.numStreams)
 		for i := range streams {
 			streams[i] = canvas.NewStreamingImage()
 			streams[i].FillMode = canvas.ImageFillStretch
 			streams[i].ScaleMode = canvas.ImageScaleFastest
-			containers[i] = streams[i]
+			streams[i].DisablePBO = true
+			streams[i].DisableTexReuse = false
+			objs[i] = streams[i]
 		}
-
-		grid := container.NewGridWithColumns(max(1, cfg.numStreams/max(1, (cfg.numStreams+1)/2)), containers...)
-		content := container.NewBorder(statusLabel, nil, nil, nil, grid)
-		fyne.DoAndWait(func() {
-			w.SetContent(content)
-			w.SetTitle(fmt.Sprintf("Bench: StreamingImage - %s", cfg.name))
-		})
-		resetCounters()
-
-		done := make(chan struct{})
-		go func() {
-			time.Sleep(300 * time.Millisecond)
-			resIdx := 0
-			currentRes := cfg.resolutions[0]
-			lastResChange := time.Now()
-			start := time.Now()
-			var pushCount int64
-
-			for time.Since(start) < cfg.duration {
-				if len(cfg.resolutions) > 1 && cfg.changeInterval > 0 && time.Since(lastResChange) >= cfg.changeInterval {
-					resIdx = (resIdx + 1) % len(cfg.resolutions)
-					currentRes = cfg.resolutions[resIdx]
-					lastResChange = time.Now()
-				}
-
-				pool := pools[currentRes]
-				frame := pool[pushCount%int64(len(pool))]
-
-				fyne.DoAndWait(func() {
-					for _, s := range streams {
-						s.UpdateFrame(frame)
-					}
-				})
-				pushCount++
+		grid := container.NewGridWithColumns(max(1, cfg.numStreams), objs...)
+		return grid, func(frame *image.RGBA) {
+			for _, s := range streams {
+				s.UpdateFrame(frame)
 			}
-
-			close(done)
-		}()
-		<-done
-		time.Sleep(100 * time.Millisecond)
-
-		stmResult = testResult{
-			label:     "StreamingImage",
-			drawCount: glpainter.BenchStreamDrawCount.Load(),
-			drawNs:    glpainter.BenchStreamDrawNs.Load(),
-			wallTime:  cfg.duration,
 		}
-	}
+	}, false)
 
-	return imgResult, stmResult
+	// 3. PBO only (PBO + new texture each frame, no reuse)
+	results[2] = runVariant(w, "PBO only", cfg, pools, func() (fyne.CanvasObject, func(*image.RGBA)) {
+		streams := make([]*canvas.StreamingImage, cfg.numStreams)
+		objs := make([]fyne.CanvasObject, cfg.numStreams)
+		for i := range streams {
+			streams[i] = canvas.NewStreamingImage()
+			streams[i].FillMode = canvas.ImageFillStretch
+			streams[i].ScaleMode = canvas.ImageScaleFastest
+			streams[i].DisablePBO = false
+			streams[i].DisableTexReuse = true
+			objs[i] = streams[i]
+		}
+		grid := container.NewGridWithColumns(max(1, cfg.numStreams), objs...)
+		return grid, func(frame *image.RGBA) {
+			for _, s := range streams {
+				s.UpdateFrame(frame)
+			}
+		}
+	}, false)
+
+	// 4. PBO + TexSubImage2D (full optimization)
+	results[3] = runVariant(w, "PBO + TexSubImage2D", cfg, pools, func() (fyne.CanvasObject, func(*image.RGBA)) {
+		streams := make([]*canvas.StreamingImage, cfg.numStreams)
+		objs := make([]fyne.CanvasObject, cfg.numStreams)
+		for i := range streams {
+			streams[i] = canvas.NewStreamingImage()
+			streams[i].FillMode = canvas.ImageFillStretch
+			streams[i].ScaleMode = canvas.ImageScaleFastest
+			streams[i].DisablePBO = false
+			streams[i].DisableTexReuse = false
+			objs[i] = streams[i]
+		}
+		grid := container.NewGridWithColumns(max(1, cfg.numStreams), objs...)
+		return grid, func(frame *image.RGBA) {
+			for _, s := range streams {
+				s.UpdateFrame(frame)
+			}
+		}
+	}, false)
+
+	return results
 }
 
-func printResult(img, stm testResult) {
-	speedup := float64(0)
-	if stm.avgDrawUs() > 0 {
-		speedup = img.avgDrawUs() / stm.avgDrawUs()
-	}
-	fmt.Printf("  canvas.Image:   %5d draws | avg %9.1f us/draw | total %8.1f ms in GL\n",
-		img.drawCount, img.avgDrawUs(), float64(img.drawNs)/1e6)
-	fmt.Printf("  StreamingImage: %5d draws | avg %9.1f us/draw | total %8.1f ms in GL\n",
-		stm.drawCount, stm.avgDrawUs(), float64(stm.drawNs)/1e6)
-	fmt.Printf("  Draw time ratio: %.2fx  (%s)\n",
-		speedup, func() string {
-			if speedup > 1.0 {
-				return "StreamingImage faster"
-			}
-			return "canvas.Image faster"
-		}())
-}
+var labels = [4]string{"canvas.Image", "TexSubImage2D", "PBO only", "PBO+TexSubImage2D"}
 
 func main() {
-	fmt.Println("================================================")
-	fmt.Println("  canvas.Image vs StreamingImage GL Benchmark")
-	fmt.Println("  (instrumented draw function timing)")
-	fmt.Println("================================================")
+	// Uncap both the software ticker and GPU VSync
+	os.Setenv("FYNE_TICK_RATE", "10000")
+	os.Setenv("FYNE_VSYNC", "0")
+
+	fmt.Println("============================================================")
+	fmt.Println("  Frame Upload Strategy Benchmark (4-way comparison)")
+	fmt.Println("  VSync OFF, render loop uncapped")
+	fmt.Println("============================================================")
 
 	a := app.New()
 	w := a.NewWindow("Streaming Benchmark")
 	w.Resize(fyne.NewSize(960, 720))
 
-	type resultPair struct {
-		cfg benchConfig
-		img testResult
-		stm testResult
+	type testRun struct {
+		cfg     benchConfig
+		results [4]result
 	}
-	var results []resultPair
+	var runs []testRun
 
 	go func() {
 		time.Sleep(500 * time.Millisecond)
@@ -280,9 +280,15 @@ func main() {
 				resolutions: []image.Point{{X: 3840, Y: 2160}},
 			},
 			{
-				name:       "4x 1080p streams (multi-camera)",
+				name:       "4x 1080p streams",
 				duration:   10 * time.Second,
 				numStreams: 4,
+				resolutions: []image.Point{{X: 1920, Y: 1080}},
+			},
+			{
+				name:       "16x 1080p streams",
+				duration:   10 * time.Second,
+				numStreams: 16,
 				resolutions: []image.Point{{X: 1920, Y: 1080}},
 			},
 			{
@@ -304,31 +310,42 @@ func main() {
 		}
 
 		for _, cfg := range configs {
-			img, stm := runBench(w, cfg)
-			printResult(img, stm)
-			results = append(results, resultPair{cfg: cfg, img: img, stm: stm})
+			results := runTest(w, cfg)
+			runs = append(runs, testRun{cfg: cfg, results: results})
 		}
 
-		// Summary
-		fmt.Println("\n================================================")
-		fmt.Println("  SUMMARY")
-		fmt.Println("================================================")
-		for _, r := range results {
-			speedup := float64(0)
-			if r.stm.avgDrawUs() > 0 {
-				speedup = r.img.avgDrawUs() / r.stm.avgDrawUs()
+		// Summary table
+		fmt.Println("\n============================================================")
+		fmt.Println("  SUMMARY  (avg microseconds per draw call)")
+		fmt.Println("============================================================")
+		fmt.Printf("%-30s  %12s  %12s  %12s  %12s\n", "Test", labels[0], labels[1], labels[2], labels[3])
+		fmt.Printf("%-30s  %12s  %12s  %12s  %12s\n", "----", "----------", "----------", "----------", "----------")
+		for _, r := range runs {
+			fmt.Printf("%-30s", r.cfg.name)
+			for i := 0; i < 4; i++ {
+				fmt.Printf("  %9.1f us", r.results[i].avgUs())
 			}
-			fmt.Printf("%-35s  Image=%7.1fus  Stream=%7.1fus  Ratio=%.2fx\n",
-				r.cfg.name, r.img.avgDrawUs(), r.stm.avgDrawUs(), speedup)
+			fmt.Println()
+		}
+
+		fmt.Println("\nSpeedups vs canvas.Image:")
+		fmt.Printf("%-30s  %12s  %12s  %12s  %12s\n", "Test", labels[0], labels[1], labels[2], labels[3])
+		fmt.Printf("%-30s  %12s  %12s  %12s  %12s\n", "----", "----------", "----------", "----------", "----------")
+		for _, r := range runs {
+			fmt.Printf("%-30s", r.cfg.name)
+			baseline := r.results[0].avgUs()
+			for i := 0; i < 4; i++ {
+				if r.results[i].avgUs() > 0 && baseline > 0 {
+					fmt.Printf("  %9.2fx   ", baseline/r.results[i].avgUs())
+				} else {
+					fmt.Printf("  %12s", "N/A")
+				}
+			}
+			fmt.Println()
 		}
 
 		fyne.DoAndWait(func() {
-			items := []fyne.CanvasObject{widget.NewLabel("Benchmark Complete!")}
-			for _, r := range results {
-				speedup := r.img.avgDrawUs() / r.stm.avgDrawUs()
-				items = append(items, widget.NewLabel(fmt.Sprintf("%-30s  %.1fus vs %.1fus  %.2fx",
-					r.cfg.name, r.img.avgDrawUs(), r.stm.avgDrawUs(), speedup)))
-			}
+			items := []fyne.CanvasObject{widget.NewLabel("Benchmark Complete! Check terminal for full results.")}
 			items = append(items, widget.NewButton("Close", func() { w.Close() }))
 			w.SetContent(container.NewVBox(items...))
 			w.SetTitle("Results")

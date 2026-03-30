@@ -1,5 +1,7 @@
 package gl
 
+import "unsafe"
+
 type context interface {
 	ActiveTexture(textureUnit uint32)
 	AttachShader(program Program, shader Shader)
@@ -8,6 +10,7 @@ type context interface {
 	BlendColor(r, g, b, a float32)
 	BlendFunc(srcFactor, destFactor uint32)
 	BufferData(target uint32, points []float32, usage uint32)
+	BufferDataBytes(target uint32, size int, data []uint8, usage uint32)
 	BufferSubData(target uint32, points []float32)
 	Clear(mask uint32)
 	ClearColor(r, g, b, a float32)
@@ -30,13 +33,17 @@ type context interface {
 	GetShaderInfoLog(shader Shader) string
 	GetUniformLocation(program Program, name string) Uniform
 	LinkProgram(program Program)
+	MapBuffer(target, access uint32) unsafe.Pointer
 	ReadBuffer(src uint32)
 	ReadPixels(x, y, width, height int, colorFormat, typ uint32, pixels []uint8)
 	Scissor(x, y, w, h int32)
 	ShaderSource(shader Shader, source string)
 	TexImage2D(target uint32, level, width, height int, colorFormat, typ uint32, data []uint8)
+	TexImage2DPBO(target uint32, level, width, height int, colorFormat, typ uint32)
 	TexSubImage2D(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32, data []uint8)
+	TexSubImage2DPBO(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32)
 	TexParameteri(target, param uint32, value int32)
+	UnmapBuffer(target uint32) bool
 	Uniform1f(uniform Uniform, v float32)
 	Uniform2f(uniform Uniform, v0, v1 float32)
 	Uniform4f(uniform Uniform, v0, v1, v2, v3 float32)

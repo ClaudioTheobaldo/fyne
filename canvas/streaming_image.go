@@ -26,6 +26,15 @@ type StreamingImage struct {
 	// Specify the type of scaling interpolation applied to the image
 	ScaleMode ImageScale
 
+	// DisablePBO forces the use of direct TexSubImage2D instead of PBO
+	// double-buffering. Useful for benchmarking or platforms where PBOs
+	// cause issues.
+	DisablePBO bool
+	// DisableTexReuse forces texture reallocation each frame instead of
+	// updating in-place. Useful for benchmarking to isolate PBO benefits
+	// from texture reuse benefits.
+	DisableTexReuse bool
+
 	mu           sync.Mutex
 	pendingFrame *image.RGBA
 	texWidth     int

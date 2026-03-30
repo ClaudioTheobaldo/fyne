@@ -6,6 +6,7 @@ import (
 	"image"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/internal/driver"
 	"fyne.io/fyne/v2/theme"
 )
@@ -52,6 +53,7 @@ type painter struct {
 	arcProgram            ProgramState
 	texScale              float32
 	pixScale              float32 // pre-calculate scale*texScale for each draw
+	pboStates             map[*canvas.StreamingImage]*pboState
 }
 
 type ProgramState struct {

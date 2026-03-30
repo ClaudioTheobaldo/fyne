@@ -4,6 +4,7 @@ package gl
 
 import (
 	"strings"
+	"unsafe"
 
 	"github.com/go-gl/gl/v2.1/gl"
 
@@ -194,6 +195,14 @@ func (c *coreContext) BufferData(target uint32, points []float32, usage uint32) 
 	gl.BufferData(target, 4*len(points), gl.Ptr(points), usage)
 }
 
+func (c *coreContext) BufferDataBytes(target uint32, size int, data []uint8, usage uint32) {
+	var ptr unsafe.Pointer
+	if len(data) > 0 {
+		ptr = gl.Ptr(data)
+	}
+	gl.BufferData(target, size, ptr, usage)
+}
+
 func (c *coreContext) BufferSubData(target uint32, points []float32) {
 	gl.BufferSubData(target, 0, 4*len(points), gl.Ptr(points))
 }
@@ -299,6 +308,10 @@ func (c *coreContext) LinkProgram(program Program) {
 	gl.LinkProgram(uint32(program))
 }
 
+func (c *coreContext) MapBuffer(target, access uint32) unsafe.Pointer {
+	return gl.MapBuffer(target, access)
+}
+
 func (c *coreContext) ReadBuffer(src uint32) {
 	gl.ReadBuffer(src)
 }
@@ -331,12 +344,24 @@ func (c *coreContext) TexImage2D(target uint32, level, width, height int, colorF
 	)
 }
 
+func (c *coreContext) TexImage2DPBO(target uint32, level, width, height int, colorFormat, typ uint32) {
+	gl.TexImage2D(target, int32(level), int32(colorFormat), int32(width), int32(height), 0, colorFormat, typ, nil)
+}
+
 func (c *coreContext) TexSubImage2D(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32, data []uint8) {
 	gl.TexSubImage2D(target, int32(level), int32(xOffset), int32(yOffset), int32(width), int32(height), colorFormat, typ, gl.Ptr(data))
 }
 
+func (c *coreContext) TexSubImage2DPBO(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32) {
+	gl.TexSubImage2D(target, int32(level), int32(xOffset), int32(yOffset), int32(width), int32(height), colorFormat, typ, nil)
+}
+
 func (c *coreContext) TexParameteri(target, param uint32, value int32) {
 	gl.TexParameteri(target, param, value)
+}
+
+func (c *coreContext) UnmapBuffer(target uint32) bool {
+	return gl.UnmapBuffer(target)
 }
 
 func (c *coreContext) Uniform1f(uniform Uniform, v float32) {

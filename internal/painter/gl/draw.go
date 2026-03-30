@@ -397,36 +397,13 @@ func (p *painter) drawStreamingImage(img *canvas.StreamingImage, pos fyne.Positi
 	}()
 
 	newFrame := img.ConsumePendingFrame()
-	existingTex, cached := cache.GetTexture(img)
 
 	var texture Texture
 	if newFrame != nil {
-		w := newFrame.Rect.Dx()
-		h := newFrame.Rect.Dy()
-		texW, texH := img.TextureSize()
-
-		if cached && w == texW && h == texH {
-			// Fast path: same dimensions, update pixels in-place
-			texture = Texture(existingTex)
-			p.ctx.ActiveTexture(texture0)
-			p.ctx.BindTexture(texture2D, texture)
-			p.ctx.TexSubImage2D(texture2D, 0, 0, 0, w, h, colorFormatRGBA, unsignedByte, newFrame.Pix)
-			p.logError()
-		} else {
-			// Slow path: dimensions changed or first frame — (re)allocate texture
-			if cached {
-				p.ctx.DeleteTexture(Texture(existingTex))
-				cache.DeleteTexture(img)
-			}
-			texture = p.imgToTexture(newFrame, img.ScaleMode)
-			cache.SetTexture(img, cache.TextureType(texture), p.canvas)
-			img.SetTextureSize(w, h)
-		}
-	} else if cached {
-		// No new frame, redraw with existing texture
+		texture = p.uploadStreamingFrame(img, newFrame)
+	} else if existingTex, cached := cache.GetTexture(img); cached {
 		texture = Texture(existingTex)
 	} else {
-		// No frame ever provided
 		return
 	}
 

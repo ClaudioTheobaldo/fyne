@@ -4,6 +4,7 @@ package gl
 
 import (
 	"math"
+	"unsafe"
 
 	"fyne.io/fyne/v2/internal/driver/mobile/gl"
 )
@@ -204,6 +205,10 @@ func (c *mobileContext) BlendFunc(srcFactor, destFactor uint32) {
 	c.glContext.BlendFunc(gl.Enum(srcFactor), gl.Enum(destFactor))
 }
 
+func (c *mobileContext) BufferDataBytes(target uint32, size int, data []uint8, usage uint32) {
+	// PBOs not supported on mobile
+}
+
 func (c *mobileContext) BufferData(target uint32, points []float32, usage uint32) {
 	data := toLEByteOrder(points...)
 	c.glContext.BufferData(gl.Enum(target), data, gl.Enum(usage))
@@ -294,6 +299,10 @@ func (c *mobileContext) GetUniformLocation(program Program, name string) Uniform
 	return Uniform(c.glContext.GetUniformLocation(gl.Program(program), name))
 }
 
+func (c *mobileContext) MapBuffer(target, access uint32) unsafe.Pointer {
+	return nil // PBOs not supported on mobile
+}
+
 func (c *mobileContext) LinkProgram(program Program) {
 	c.glContext.LinkProgram(gl.Program(program))
 }
@@ -326,12 +335,24 @@ func (c *mobileContext) TexImage2D(target uint32, level, width, height int, colo
 	)
 }
 
+func (c *mobileContext) TexImage2DPBO(target uint32, level, width, height int, colorFormat, typ uint32) {
+	// PBOs not supported on mobile
+}
+
 func (c *mobileContext) TexSubImage2D(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32, data []uint8) {
 	c.glContext.TexSubImage2D(gl.Enum(target), level, xOffset, yOffset, width, height, gl.Enum(colorFormat), gl.Enum(typ), data)
 }
 
+func (c *mobileContext) TexSubImage2DPBO(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32) {
+	// PBOs not supported on mobile
+}
+
 func (c *mobileContext) TexParameteri(target, param uint32, value int32) {
 	c.glContext.TexParameteri(gl.Enum(target), gl.Enum(param), int(value))
+}
+
+func (c *mobileContext) UnmapBuffer(target uint32) bool {
+	return false // PBOs not supported on mobile
 }
 
 func (c *mobileContext) Uniform1f(uniform Uniform, v float32) {

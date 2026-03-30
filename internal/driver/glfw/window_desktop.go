@@ -770,6 +770,10 @@ func (w *window) create() {
 	w.RunWithContext(func() {
 		w.canvas.SetPainter(gl.NewPainter(w.canvas, w))
 		w.canvas.Painter().Init()
+
+		if os.Getenv("FYNE_VSYNC") == "0" {
+			glfw.SwapInterval(0)
+		}
 	})
 
 	w.setDarkMode()

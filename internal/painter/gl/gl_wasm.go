@@ -4,6 +4,7 @@ package gl
 
 import (
 	"math"
+	"unsafe"
 
 	"github.com/fyne-io/gl-js"
 )
@@ -181,6 +182,10 @@ func (c *xjsContext) BlendFunc(srcFactor, destFactor uint32) {
 	gl.BlendFunc(gl.Enum(srcFactor), gl.Enum(destFactor))
 }
 
+func (c *xjsContext) BufferDataBytes(target uint32, size int, data []uint8, usage uint32) {
+	// PBOs not supported on WebGL
+}
+
 func (c *xjsContext) BufferData(target uint32, points []float32, usage uint32) {
 	gl.BufferData(gl.Enum(target), toLEByteOrder(points...), gl.Enum(usage))
 }
@@ -270,6 +275,10 @@ func (c *xjsContext) GetUniformLocation(program Program, name string) Uniform {
 	return Uniform(gl.GetUniformLocation(gl.Program(program), name))
 }
 
+func (c *xjsContext) MapBuffer(target, access uint32) unsafe.Pointer {
+	return nil // PBOs not supported on WebGL
+}
+
 func (c *xjsContext) LinkProgram(program Program) {
 	gl.LinkProgram(gl.Program(program))
 }
@@ -301,12 +310,24 @@ func (c *xjsContext) TexImage2D(target uint32, level, width, height int, colorFo
 	)
 }
 
+func (c *xjsContext) TexImage2DPBO(target uint32, level, width, height int, colorFormat, typ uint32) {
+	// PBOs not supported on WebGL
+}
+
 func (c *xjsContext) TexSubImage2D(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32, data []uint8) {
 	gl.TexSubImage2D(gl.Enum(target), level, xOffset, yOffset, width, height, gl.Enum(colorFormat), gl.Enum(typ), data)
 }
 
+func (c *xjsContext) TexSubImage2DPBO(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32) {
+	// PBOs not supported on WebGL
+}
+
 func (c *xjsContext) TexParameteri(target, param uint32, value int32) {
 	gl.TexParameteri(gl.Enum(target), gl.Enum(param), int(value))
+}
+
+func (c *xjsContext) UnmapBuffer(target uint32) bool {
+	return false // PBOs not supported on WebGL
 }
 
 func (c *xjsContext) Uniform1f(uniform Uniform, v float32) {

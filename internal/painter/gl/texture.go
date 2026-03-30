@@ -22,6 +22,11 @@ var noTexture = Texture(cache.NoTexture)
 type Texture cache.TextureType
 
 func (p *painter) freeTexture(obj fyne.CanvasObject) {
+	// Clean up PBO state if this is a StreamingImage
+	if si, ok := obj.(*canvas.StreamingImage); ok {
+		p.destroyPBO(si)
+	}
+
 	texture, ok := cache.GetTexture(obj)
 	if !ok {
 		return
