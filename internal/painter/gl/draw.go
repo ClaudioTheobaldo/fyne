@@ -431,9 +431,23 @@ func (p *painter) drawStreamingImageYUV(img *canvas.StreamingImage, pos fyne.Pos
 		if state, ok := p.yuvPBOStates[img]; ok && state.ready {
 			texY, texU, texV = state.texY, state.texU, state.texV
 		} else {
+			// No YUV content yet — fall back to RGBA pending frame (e.g. placeholder)
+			if rgbaFrame := img.ConsumePendingFrame(); rgbaFrame != nil {
+				texture := p.uploadStreamingFrame(img, rgbaFrame)
+				p.drawQuadWithTexture(texture, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()), 0, 0)
+			} else if existingTex, cached := cache.GetTexture(img); cached {
+				p.drawQuadWithTexture(Texture(existingTex), pos, img.Size(), frame, img.FillMode, float32(img.Alpha()), 0, 0)
+			}
 			return
 		}
 	} else {
+		// No YUV state at all — fall back to RGBA pending frame (e.g. placeholder)
+		if rgbaFrame := img.ConsumePendingFrame(); rgbaFrame != nil {
+			texture := p.uploadStreamingFrame(img, rgbaFrame)
+			p.drawQuadWithTexture(texture, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()), 0, 0)
+		} else if existingTex, cached := cache.GetTexture(img); cached {
+			p.drawQuadWithTexture(Texture(existingTex), pos, img.Size(), frame, img.FillMode, float32(img.Alpha()), 0, 0)
+		}
 		return
 	}
 
