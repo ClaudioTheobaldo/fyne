@@ -15,6 +15,8 @@ const (
 	bitDepthBuffer        = gl.DEPTH_BUFFER_BIT
 	clampToEdge           = gl.CLAMP_TO_EDGE
 	colorFormatRGBA       = gl.RGBA
+	colorFormatLuminance  = gl.LUMINANCE
+	unpackRowLength       uint32 = 0x0CF2
 	compileStatus         = gl.COMPILE_STATUS
 	constantAlpha         = gl.CONSTANT_ALPHA
 	float                 = gl.FLOAT
@@ -29,6 +31,8 @@ const (
 	srcAlpha              = gl.SRC_ALPHA
 	staticDraw            = gl.STATIC_DRAW
 	texture0              = gl.TEXTURE0
+	texture1              = gl.TEXTURE1
+	texture2              = gl.TEXTURE2
 	texture2D             = gl.TEXTURE_2D
 	textureMinFilter      = gl.TEXTURE_MIN_FILTER
 	textureMagFilter      = gl.TEXTURE_MAG_FILTER
@@ -328,6 +332,14 @@ func (c *xjsContext) TexParameteri(target, param uint32, value int32) {
 
 func (c *xjsContext) UnmapBuffer(target uint32) bool {
 	return false // PBOs not supported on WebGL
+}
+
+func (c *xjsContext) PixelStorei(pname uint32, param int32) {
+	gl.PixelStorei(gl.Enum(pname), int(param))
+}
+
+func (c *xjsContext) Uniform1i(uniform Uniform, v int32) {
+	gl.Uniform1i(gl.Uniform(uniform), int(v))
 }
 
 func (c *xjsContext) Uniform1f(uniform Uniform, v float32) {

@@ -390,6 +390,11 @@ func (p *painter) drawText(text *canvas.Text, pos fyne.Position, frame fyne.Size
 }
 
 func (p *painter) drawStreamingImage(img *canvas.StreamingImage, pos fyne.Position, frame fyne.Size) {
+	if img.PixelFormat == canvas.PixelFormatYUV420P {
+		p.drawStreamingImageYUV(img, pos, frame)
+		return
+	}
+
 	t0 := time.Now()
 	defer func() {
 		BenchStreamDrawNs.Add(time.Since(t0).Nanoseconds())
@@ -408,6 +413,66 @@ func (p *painter) drawStreamingImage(img *canvas.StreamingImage, pos fyne.Positi
 	}
 
 	p.drawQuadWithTexture(texture, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()), 0, 0)
+}
+
+func (p *painter) drawStreamingImageYUV(img *canvas.StreamingImage, pos fyne.Position, frame fyne.Size) {
+	t0 := time.Now()
+	defer func() {
+		BenchStreamDrawNs.Add(time.Since(t0).Nanoseconds())
+		BenchStreamDrawCount.Add(1)
+	}()
+
+	newFrame := img.ConsumePendingYUVFrame()
+
+	var texY, texU, texV Texture
+	if newFrame != nil {
+		texY, texU, texV = p.uploadStreamingYUVFrame(img, newFrame)
+	} else if p.yuvPBOStates != nil {
+		if state, ok := p.yuvPBOStates[img]; ok && state.ready {
+			texY, texU, texV = state.texY, state.texU, state.texV
+		} else {
+			return
+		}
+	} else {
+		return
+	}
+
+	p.drawQuadWithYUVTextures(texY, texU, texV, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()))
+}
+
+func (p *painter) drawQuadWithYUVTextures(texY, texU, texV Texture, pos fyne.Position, size, frame fyne.Size,
+	fill canvas.ImageFill, alpha float32,
+) {
+	points, insets := p.rectCoords(size, pos, frame, fill, 0, 0)
+	inner, _ := rectInnerCoords(size, pos, fill, 0)
+
+	p.ctx.UseProgram(p.yuvProgram.ref)
+	p.updateBuffer(p.yuvProgram.buff, points)
+	p.UpdateVertexArray(p.yuvProgram, "vert", 3, 5, 0)
+	p.UpdateVertexArray(p.yuvProgram, "vertTexCoord", 2, 5, 3)
+
+	p.SetUniform1f(p.yuvProgram, "cornerRadius", 0)
+	p.SetUniform2f(p.yuvProgram, "size", inner.Width*p.pixScale, inner.Height*p.pixScale)
+	p.SetUniform4f(p.yuvProgram, "inset", insets[0], insets[1], insets[2], insets[3])
+	p.SetUniform1f(p.yuvProgram, "alpha", alpha)
+
+	p.ctx.BlendFunc(one, oneMinusSrcAlpha)
+	p.logError()
+
+	// Bind Y to TEXTURE0, U to TEXTURE1, V to TEXTURE2
+	p.ctx.ActiveTexture(texture0)
+	p.ctx.BindTexture(texture2D, texY)
+	p.ctx.ActiveTexture(texture1)
+	p.ctx.BindTexture(texture2D, texU)
+	p.ctx.ActiveTexture(texture2)
+	p.ctx.BindTexture(texture2D, texV)
+	p.logError()
+
+	p.ctx.DrawArrays(triangleStrip, 0, 4)
+	p.logError()
+
+	// Reset active texture to TEXTURE0 for other draw calls
+	p.ctx.ActiveTexture(texture0)
 }
 
 func (p *painter) drawQuadWithTexture(texture Texture, pos fyne.Position, size, frame fyne.Size,

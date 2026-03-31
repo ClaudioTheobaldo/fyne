@@ -15,6 +15,8 @@ const (
 	bitDepthBuffer        = gl.DepthBufferBit
 	clampToEdge           = gl.ClampToEdge
 	colorFormatRGBA       = gl.RGBA
+	colorFormatLuminance  = gl.Luminance
+	unpackRowLength       uint32 = 0x0CF2
 	compileStatus         = gl.CompileStatus
 	constantAlpha         = gl.ConstantAlpha
 	float                 = gl.Float
@@ -29,6 +31,8 @@ const (
 	srcAlpha              = gl.SrcAlpha
 	staticDraw            = gl.StaticDraw
 	texture0              = gl.Texture0
+	texture1              = gl.Texture1
+	texture2              = gl.Texture2
 	texture2D             = gl.Texture2D
 	textureMinFilter      = gl.TextureMinFilter
 	textureMagFilter      = gl.TextureMagFilter
@@ -353,6 +357,14 @@ func (c *mobileContext) TexParameteri(target, param uint32, value int32) {
 
 func (c *mobileContext) UnmapBuffer(target uint32) bool {
 	return false // PBOs not supported on mobile
+}
+
+func (c *mobileContext) PixelStorei(pname uint32, param int32) {
+	c.glContext.PixelStorei(gl.Enum(pname), int(param))
+}
+
+func (c *mobileContext) Uniform1i(uniform Uniform, v int32) {
+	c.glContext.Uniform1i(gl.Uniform(uniform), int(v))
 }
 
 func (c *mobileContext) Uniform1f(uniform Uniform, v float32) {

@@ -10,6 +10,77 @@ import (
 	"fyne.io/fyne/v2/internal/cache"
 )
 
+// uploadSinglePlane writes a single-channel plane into the write PBO and uploads
+// from the read PBO to the given texture. Returns the texture.
+func (p *painter) uploadSinglePlane(
+	pbo [2]Buffer, tex Texture, writeIdx, readIdx int,
+	w, h, stride int, data []byte, ready bool, scaleMode canvas.ImageScale,
+) Texture {
+	pixelSize := stride * h
+
+	// Write plane into current PBO
+	p.ctx.BindBuffer(pixelUnpackBuffer, pbo[writeIdx])
+	p.ctx.BufferDataBytes(pixelUnpackBuffer, pixelSize, nil, streamDraw)
+	ptr := p.ctx.MapBuffer(pixelUnpackBuffer, writeOnly)
+	if ptr != nil {
+		dst := unsafe.Slice((*byte)(ptr), pixelSize)
+		copy(dst, data[:pixelSize])
+		p.ctx.UnmapBuffer(pixelUnpackBuffer)
+	}
+
+	// Set row length for stride handling (reset after upload)
+	if stride != w {
+		p.ctx.PixelStorei(unpackRowLength, int32(stride))
+	}
+
+	// Upload from the other PBO to texture
+	if ready {
+		p.ctx.BindBuffer(pixelUnpackBuffer, pbo[readIdx])
+		p.ctx.ActiveTexture(texture0)
+		p.ctx.BindTexture(texture2D, tex)
+		p.ctx.TexSubImage2DPBO(texture2D, 0, 0, 0, w, h, colorFormatLuminance, unsignedByte)
+	} else {
+		// First frame — allocate texture from write PBO
+		p.ctx.BindBuffer(pixelUnpackBuffer, pbo[writeIdx])
+		p.ctx.ActiveTexture(texture0)
+		p.ctx.BindTexture(texture2D, tex)
+		p.ctx.TexImage2DPBO(texture2D, 0, w, h, colorFormatLuminance, unsignedByte)
+	}
+
+	if stride != w {
+		p.ctx.PixelStorei(unpackRowLength, 0)
+	}
+
+	p.ctx.BindBuffer(pixelUnpackBuffer, noBuffer)
+	p.logError()
+	return tex
+}
+
+// uploadStreamingYUVFrame uploads Y, U, V planes via PBO double-buffering.
+func (p *painter) uploadStreamingYUVFrame(img *canvas.StreamingImage, frame *canvas.YUV420PFrame) (Texture, Texture, Texture) {
+	w := frame.Width
+	h := frame.Height
+	uvW := w / 2
+	uvH := h / 2
+
+	state := p.getOrCreateYUVPBO(img, w, h)
+	writeIdx := state.index
+	readIdx := 1 - writeIdx
+
+	state.texY = p.uploadSinglePlane(state.yPBO, state.texY, writeIdx, readIdx,
+		w, h, frame.StrideY, frame.Y, state.ready, img.ScaleMode)
+	state.texU = p.uploadSinglePlane(state.uPBO, state.texU, writeIdx, readIdx,
+		uvW, uvH, frame.StrideU, frame.U, state.ready, img.ScaleMode)
+	state.texV = p.uploadSinglePlane(state.vPBO, state.texV, writeIdx, readIdx,
+		uvW, uvH, frame.StrideV, frame.V, state.ready, img.ScaleMode)
+
+	state.ready = true
+	state.index = 1 - state.index
+
+	img.SetTextureSize(w, h)
+	return state.texY, state.texU, state.texV
+}
+
 // uploadStreamingFrameDirect uploads frame pixels via TexSubImage2D without PBOs.
 // Used when PBOs are disabled or as a fallback.
 func (p *painter) uploadStreamingFrameDirect(img *canvas.StreamingImage, frame *image.RGBA) Texture {

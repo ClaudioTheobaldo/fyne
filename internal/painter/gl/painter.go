@@ -51,9 +51,11 @@ type painter struct {
 	roundRectangleProgram ProgramState
 	polygonProgram        ProgramState
 	arcProgram            ProgramState
+	yuvProgram            ProgramState
 	texScale              float32
 	pixScale              float32 // pre-calculate scale*texScale for each draw
 	pboStates             map[*canvas.StreamingImage]*pboState
+	yuvPBOStates          map[*canvas.StreamingImage]*yuvPBOState
 }
 
 type ProgramState struct {

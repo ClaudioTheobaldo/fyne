@@ -7,6 +7,21 @@ import (
 	"fyne.io/fyne/v2"
 )
 
+// Pixel format constants for StreamingImage.
+const (
+	PixelFormatRGBA    = 0
+	PixelFormatYUV420P = 1
+)
+
+// YUV420PFrame holds planar YUV 4:2:0 data for GPU upload.
+// Y is full resolution (Width x Height), U and V are quarter resolution (Width/2 x Height/2).
+// Stride values indicate the byte width of each plane row (may include padding).
+type YUV420PFrame struct {
+	Y, U, V                   []byte
+	StrideY, StrideU, StrideV int
+	Width, Height             int
+}
+
 // Declare conformity with CanvasObject interface
 var _ fyne.CanvasObject = (*StreamingImage)(nil)
 
@@ -35,8 +50,13 @@ type StreamingImage struct {
 	// from texture reuse benefits.
 	DisableTexReuse bool
 
+	// PixelFormat selects the frame data format: PixelFormatRGBA (default) or PixelFormatYUV420P.
+	// Set at construction time; do not change after the image is visible.
+	PixelFormat int
+
 	mu           sync.Mutex
 	pendingFrame *image.RGBA
+	pendingYUV   *YUV420PFrame
 	texWidth     int
 	texHeight    int
 }
@@ -124,6 +144,30 @@ func (s *StreamingImage) SetTextureSize(w, h int) {
 	s.mu.Unlock()
 }
 
+// UpdateYUVFrame provides new YUV420P planar data to be displayed. The frame
+// will be uploaded to the GPU as three single-channel textures on the next
+// paint cycle and converted to RGB by a fragment shader.
+// This method is safe to call from any goroutine.
+func (s *StreamingImage) UpdateYUVFrame(frame *YUV420PFrame) {
+	s.mu.Lock()
+	s.pendingYUV = frame
+	s.mu.Unlock()
+
+	repaint(s)
+}
+
+// ConsumePendingYUVFrame returns the most recently provided YUV frame and
+// clears the pending state. Returns nil if no new frame is available.
+// Called by the painter on the GL thread.
+func (s *StreamingImage) ConsumePendingYUVFrame() *YUV420PFrame {
+	s.mu.Lock()
+	frame := s.pendingYUV
+	s.pendingYUV = nil
+	s.mu.Unlock()
+
+	return frame
+}
+
 // NewStreamingImage returns a new StreamingImage instance optimized for
 // displaying rapidly updating image data such as video frames.
 //
@@ -132,5 +176,16 @@ func NewStreamingImage() *StreamingImage {
 	return &StreamingImage{
 		ScaleMode: ImageScaleFastest,
 		FillMode:  ImageFillStretch,
+	}
+}
+
+// NewStreamingImageYUV420P returns a StreamingImage configured for YUV420P
+// planar input. Frames are uploaded as three single-channel textures and
+// converted to RGB on the GPU via a fragment shader.
+func NewStreamingImageYUV420P() *StreamingImage {
+	return &StreamingImage{
+		ScaleMode:   ImageScaleFastest,
+		FillMode:    ImageFillStretch,
+		PixelFormat: PixelFormatYUV420P,
 	}
 }

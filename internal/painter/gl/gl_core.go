@@ -17,6 +17,8 @@ const (
 	bitDepthBuffer        = gl.DEPTH_BUFFER_BIT
 	clampToEdge           = gl.CLAMP_TO_EDGE
 	colorFormatRGBA       = gl.RGBA
+	colorFormatLuminance  = gl.LUMINANCE
+	unpackRowLength       = gl.UNPACK_ROW_LENGTH
 	compileStatus         = gl.COMPILE_STATUS
 	constantAlpha         = gl.CONSTANT_ALPHA
 	float                 = gl.FLOAT
@@ -31,6 +33,8 @@ const (
 	srcAlpha              = gl.SRC_ALPHA
 	staticDraw            = gl.STATIC_DRAW
 	texture0              = gl.TEXTURE0
+	texture1              = gl.TEXTURE1
+	texture2              = gl.TEXTURE2
 	texture2D             = gl.TEXTURE_2D
 	textureMinFilter      = gl.TEXTURE_MIN_FILTER
 	textureMagFilter      = gl.TEXTURE_MAG_FILTER
@@ -146,6 +150,21 @@ func (p *painter) Init() {
 		"fill_color",
 	)
 	p.enableAttribArrays(p.arcProgram, "vert", "normal")
+
+	p.yuvProgram = ProgramState{
+		ref:        p.createProgram("yuv420p"),
+		buff:       p.createBuffer(20),
+		uniforms:   make(map[string]*UniformState),
+		attributes: make(map[string]Attribute),
+	}
+	p.getUniformLocations(p.yuvProgram, "texY", "texU", "texV", "alpha", "cornerRadius", "size", "inset")
+	p.enableAttribArrays(p.yuvProgram, "vert", "vertTexCoord")
+
+	// Bind sampler uniforms to texture units (constant, set once)
+	p.ctx.UseProgram(p.yuvProgram.ref)
+	p.ctx.Uniform1i(p.yuvProgram.uniforms["texY"].ref, 0) // TEXTURE0
+	p.ctx.Uniform1i(p.yuvProgram.uniforms["texU"].ref, 1) // TEXTURE1
+	p.ctx.Uniform1i(p.yuvProgram.uniforms["texV"].ref, 2) // TEXTURE2
 }
 
 func (p *painter) getUniformLocations(pState ProgramState, names ...string) {
@@ -362,6 +381,14 @@ func (c *coreContext) TexParameteri(target, param uint32, value int32) {
 
 func (c *coreContext) UnmapBuffer(target uint32) bool {
 	return gl.UnmapBuffer(target)
+}
+
+func (c *coreContext) PixelStorei(pname uint32, param int32) {
+	gl.PixelStorei(pname, param)
+}
+
+func (c *coreContext) Uniform1i(uniform Uniform, v int32) {
+	gl.Uniform1i(int32(uniform), v)
 }
 
 func (c *coreContext) Uniform1f(uniform Uniform, v float32) {

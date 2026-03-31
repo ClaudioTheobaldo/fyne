@@ -71,3 +71,86 @@ func (p *painter) destroyPBOState(state *pboState) {
 		p.ctx.DeleteBuffer(state.buffers[i])
 	}
 }
+
+// yuvPBOState holds double-buffered PBOs and cached textures for YUV420P streaming.
+// Three pairs of PBOs (one per plane: Y, U, V) plus three textures.
+type yuvPBOState struct {
+	yPBO, uPBO, vPBO [2]Buffer
+	texY, texU, texV Texture
+	index            int
+	width, height    int
+	ready            bool
+}
+
+// getOrCreateYUVPBO returns the YUV PBO state for the given StreamingImage,
+// creating new PBOs and textures if needed or if dimensions changed.
+func (p *painter) getOrCreateYUVPBO(img *canvas.StreamingImage, w, h int) *yuvPBOState {
+	if p.yuvPBOStates == nil {
+		p.yuvPBOStates = make(map[*canvas.StreamingImage]*yuvPBOState)
+	}
+
+	state, ok := p.yuvPBOStates[img]
+	if ok && state.width == w && state.height == h {
+		return state
+	}
+
+	if ok {
+		p.destroyYUVPBOState(state)
+	}
+
+	state = &yuvPBOState{width: w, height: h}
+
+	// Y plane: w * h bytes, U/V planes: (w/2) * (h/2) bytes each
+	ySize := w * h
+	uvSize := (w / 2) * (h / 2)
+
+	// Create PBO pairs for each plane
+	for i := 0; i < 2; i++ {
+		state.yPBO[i] = p.ctx.CreateBuffer()
+		p.ctx.BindBuffer(pixelUnpackBuffer, state.yPBO[i])
+		p.ctx.BufferDataBytes(pixelUnpackBuffer, ySize, nil, streamDraw)
+
+		state.uPBO[i] = p.ctx.CreateBuffer()
+		p.ctx.BindBuffer(pixelUnpackBuffer, state.uPBO[i])
+		p.ctx.BufferDataBytes(pixelUnpackBuffer, uvSize, nil, streamDraw)
+
+		state.vPBO[i] = p.ctx.CreateBuffer()
+		p.ctx.BindBuffer(pixelUnpackBuffer, state.vPBO[i])
+		p.ctx.BufferDataBytes(pixelUnpackBuffer, uvSize, nil, streamDraw)
+	}
+	p.ctx.BindBuffer(pixelUnpackBuffer, noBuffer)
+	p.logError()
+
+	// Create textures for each plane
+	state.texY = p.newTexture(img.ScaleMode)
+	state.texU = p.newTexture(img.ScaleMode)
+	state.texV = p.newTexture(img.ScaleMode)
+
+	p.yuvPBOStates[img] = state
+	return state
+}
+
+// destroyYUVPBO removes and deletes YUV PBOs and textures for a StreamingImage.
+func (p *painter) destroyYUVPBO(img *canvas.StreamingImage) {
+	if p.yuvPBOStates == nil {
+		return
+	}
+	state, ok := p.yuvPBOStates[img]
+	if !ok {
+		return
+	}
+	p.destroyYUVPBOState(state)
+	delete(p.yuvPBOStates, img)
+}
+
+// destroyYUVPBOState deletes the GL buffer objects and textures.
+func (p *painter) destroyYUVPBOState(state *yuvPBOState) {
+	for i := 0; i < 2; i++ {
+		p.ctx.DeleteBuffer(state.yPBO[i])
+		p.ctx.DeleteBuffer(state.uPBO[i])
+		p.ctx.DeleteBuffer(state.vPBO[i])
+	}
+	p.ctx.DeleteTexture(state.texY)
+	p.ctx.DeleteTexture(state.texU)
+	p.ctx.DeleteTexture(state.texV)
+}

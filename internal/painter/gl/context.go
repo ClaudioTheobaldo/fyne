@@ -44,6 +44,8 @@ type context interface {
 	TexSubImage2DPBO(target uint32, level, xOffset, yOffset, width, height int, colorFormat, typ uint32)
 	TexParameteri(target, param uint32, value int32)
 	UnmapBuffer(target uint32) bool
+	PixelStorei(pname uint32, param int32)
+	Uniform1i(uniform Uniform, v int32)
 	Uniform1f(uniform Uniform, v float32)
 	Uniform2f(uniform Uniform, v0, v1 float32)
 	Uniform4f(uniform Uniform, v0, v1, v2, v3 float32)

@@ -31,6 +31,9 @@ var (
 
 	//go:embed shaders/arc_es.frag
 	shaderArcesFrag []byte
+
+	//go:embed shaders/yuv420p_es.frag
+	shaderYuv420pesFrag []byte
 )
 
 func shaderSourceNamed(name string) ([]byte, []byte) {
@@ -47,6 +50,8 @@ func shaderSourceNamed(name string) ([]byte, []byte) {
 		return shaderRectangleesVert, shaderPolygonesFrag
 	case "arc_es":
 		return shaderRectangleesVert, shaderArcesFrag
+	case "yuv420p_es":
+		return shaderSimpleesVert, shaderYuv420pesFrag
 	}
 	return nil, nil
 }
