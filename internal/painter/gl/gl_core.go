@@ -165,6 +165,8 @@ func (p *painter) Init() {
 	p.ctx.Uniform1i(p.yuvProgram.uniforms["texY"].ref, 0) // TEXTURE0
 	p.ctx.Uniform1i(p.yuvProgram.uniforms["texU"].ref, 1) // TEXTURE1
 	p.ctx.Uniform1i(p.yuvProgram.uniforms["texV"].ref, 2) // TEXTURE2
+
+	p.shaderCache = make(map[string]*ProgramState)
 }
 
 func (p *painter) getUniformLocations(pState ProgramState, names ...string) {

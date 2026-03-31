@@ -162,6 +162,8 @@ func (p *painter) Init() {
 	p.roundRectangleProgram = compiled[3]
 	p.polygonProgram = compiled[4]
 	p.arcProgram = compiled[5]
+
+	p.shaderCache = make(map[string]*ProgramState)
 }
 
 func (p *painter) getUniformLocations(pState ProgramState, names ...string) {

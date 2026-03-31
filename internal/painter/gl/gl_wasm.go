@@ -141,6 +141,8 @@ func (p *painter) Init() {
 		"fill_color",
 	)
 	p.enableAttribArrays(p.arcProgram, "vert", "normal")
+
+	p.shaderCache = make(map[string]*ProgramState)
 }
 
 func (p *painter) getUniformLocations(pState ProgramState, names ...string) {

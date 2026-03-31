@@ -36,6 +36,10 @@ var (
 	shaderYuv420pesFrag []byte
 )
 
+func isGLES() bool { return true }
+
+func shaderRectVertexSrc() []byte { return shaderRectangleesVert }
+
 func shaderSourceNamed(name string) ([]byte, []byte) {
 	switch name {
 	case "line_es":
