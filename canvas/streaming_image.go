@@ -92,7 +92,7 @@ func (s *StreamingImage) UpdateFrame(frame *image.RGBA) {
 	s.pendingFrame = frame
 	s.mu.Unlock()
 
-	Refresh(s)
+	repaint(s)
 }
 
 // ConsumePendingFrame returns the most recently provided frame and clears the
