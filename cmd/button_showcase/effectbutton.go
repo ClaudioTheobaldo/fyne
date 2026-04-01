@@ -11,8 +11,13 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// Compile-time interface checks
+var _ fyne.Tappable = (*EffectButton)(nil)
+var _ desktop.Hoverable = (*EffectButton)(nil)
+var _ desktop.Mouseable = (*EffectButton)(nil)
+
 // EffectButton is a custom button widget that supports shader effects
-// on its background, with hover and press state transitions.
+// on its background rectangle, with hover and press state transitions.
 type EffectButton struct {
 	widget.BaseWidget
 
@@ -24,13 +29,13 @@ type EffectButton struct {
 	MinHeight float32
 	Radius    float32
 
-	OnTapped func()
-
-	// Effect callbacks for hover/press states
+	OnTapped   func()
 	OnHoverIn  func(bg *canvas.Rectangle, label *canvas.Text)
 	OnHoverOut func(bg *canvas.Rectangle, label *canvas.Text)
 	OnPress    func(bg *canvas.Rectangle, label *canvas.Text)
 	OnRelease  func(bg *canvas.Rectangle, label *canvas.Text)
+	// OnInit is called once after CreateRenderer to apply idle-state effects
+	OnInit func(bg *canvas.Rectangle, label *canvas.Text)
 
 	hovered bool
 	pressed bool
@@ -44,9 +49,9 @@ func NewEffectButton(text string, bgColor, textColor color.Color, tapped func())
 		TextColor: textColor,
 		BgColor:   bgColor,
 		TextSize:  14,
-		MinWidth:  160,
-		MinHeight: 48,
-		Radius:    8,
+		MinWidth:  180,
+		MinHeight: 50,
+		Radius:    12,
 		OnTapped:  tapped,
 	}
 	b.ExtendBaseWidget(b)
@@ -61,6 +66,10 @@ func (b *EffectButton) CreateRenderer() fyne.WidgetRenderer {
 	b.label.TextSize = b.TextSize
 	b.label.TextStyle = fyne.TextStyle{Bold: true}
 	b.label.Alignment = fyne.TextAlignCenter
+
+	if b.OnInit != nil {
+		b.OnInit(b.bg, b.label)
+	}
 
 	return &effectButtonRenderer{btn: b, bg: b.bg, label: b.label}
 }
@@ -105,16 +114,6 @@ func (b *EffectButton) MouseUp(_ *desktop.MouseEvent) {
 	}
 }
 
-// Bg returns the background rectangle for external effect manipulation.
-func (b *EffectButton) Bg() *canvas.Rectangle {
-	return b.bg
-}
-
-// Label returns the text label for external effect manipulation.
-func (b *EffectButton) Label() *canvas.Text {
-	return b.label
-}
-
 type effectButtonRenderer struct {
 	btn   *EffectButton
 	bg    *canvas.Rectangle
@@ -124,7 +123,8 @@ type effectButtonRenderer struct {
 func (r *effectButtonRenderer) Layout(size fyne.Size) {
 	r.bg.Resize(size)
 	r.label.Resize(size)
-	r.label.Move(fyne.NewPos(0, (size.Height-r.label.MinSize().Height)/2))
+	labelH := r.label.MinSize().Height
+	r.label.Move(fyne.NewPos(0, (size.Height-labelH)/2))
 }
 
 func (r *effectButtonRenderer) MinSize() fyne.Size {
@@ -147,7 +147,7 @@ func (r *effectButtonRenderer) Objects() []fyne.CanvasObject {
 
 func (r *effectButtonRenderer) Destroy() {}
 
-// Helper: animate an effect parameter smoothly
+// animateEffect smoothly transitions a float uniform
 func animateEffect(eff *effect.Effect, param string, from, to float32, duration time.Duration) {
 	anim := fyne.NewAnimation(duration, func(t float32) {
 		eff.SetFloat(param, from+(to-from)*t)
