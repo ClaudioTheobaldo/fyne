@@ -34,11 +34,20 @@ var (
 
 	//go:embed shaders/yuv420p.frag
 	shaderYuv420pFrag []byte
+
+	//go:embed shaders/effect_passthrough.vert
+	shaderEffectPassthroughVert []byte
+
+	//go:embed shaders/effect_passthrough.frag
+	shaderEffectPassthroughFrag []byte
 )
 
 func isGLES() bool { return false }
 
 func shaderRectVertexSrc() []byte { return shaderRectangleVert }
+
+func effectPassthroughVertSrc() []byte { return shaderEffectPassthroughVert }
+func effectPassthroughFragSrc() []byte { return shaderEffectPassthroughFrag }
 
 func shaderSourceNamed(name string) ([]byte, []byte) {
 	switch name {

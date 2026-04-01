@@ -46,22 +46,31 @@ const (
 	vertexShader          = gl.VERTEX_SHADER
 )
 
-const (
-	noBuffer = Buffer(0)
-	noShader = Shader(0)
-)
-
 type (
 	// Attribute represents a GL attribute
 	Attribute int32
 	// Buffer represents a GL buffer
 	Buffer uint32
+	// Framebuffer represents a GL framebuffer object
+	Framebuffer uint32
 	// Program represents a compiled GL program
 	Program uint32
 	// Shader represents a GL shader
 	Shader uint32
 	// Uniform represents a GL uniform
 	Uniform int32
+)
+
+const (
+	noBuffer      = Buffer(0)
+	noShader      = Shader(0)
+	noFramebuffer = Framebuffer(0)
+)
+
+const (
+	glFramebuffer       = gl.FRAMEBUFFER
+	colorAttachment0    = gl.COLOR_ATTACHMENT0
+	framebufferComplete = gl.FRAMEBUFFER_COMPLETE
 )
 
 var textureFilterToGL = [...]int32{gl.LINEAR, gl.NEAREST, gl.LINEAR}
@@ -167,6 +176,7 @@ func (p *painter) Init() {
 	p.ctx.Uniform1i(p.yuvProgram.uniforms["texV"].ref, 2) // TEXTURE2
 
 	p.shaderCache = make(map[string]*ProgramState)
+	p.initEffectPipeline()
 }
 
 func (p *painter) getUniformLocations(pState ProgramState, names ...string) {
@@ -415,4 +425,39 @@ func (c *coreContext) VertexAttribPointerWithOffset(attribute Attribute, size in
 
 func (c *coreContext) Viewport(x, y, width, height int) {
 	gl.Viewport(int32(x), int32(y), int32(width), int32(height))
+}
+
+func (c *coreContext) CreateFramebuffer() Framebuffer {
+	var fbo uint32
+	gl.GenFramebuffers(1, &fbo)
+	return Framebuffer(fbo)
+}
+
+func (c *coreContext) DeleteFramebuffer(fb Framebuffer) {
+	v := uint32(fb)
+	gl.DeleteFramebuffers(1, &v)
+}
+
+func (c *coreContext) BindFramebuffer(target uint32, fb Framebuffer) {
+	gl.BindFramebuffer(target, uint32(fb))
+}
+
+func (c *coreContext) FramebufferTexture2D(target, attachment, textarget uint32, texture Texture, level int) {
+	gl.FramebufferTexture2D(target, attachment, textarget, uint32(texture), int32(level))
+}
+
+func (c *coreContext) CheckFramebufferStatus(target uint32) uint32 {
+	return gl.CheckFramebufferStatus(target)
+}
+
+func (c *coreContext) Uniform3f(uniform Uniform, v0, v1, v2 float32) {
+	gl.Uniform3f(int32(uniform), v0, v1, v2)
+}
+
+func (c *coreContext) UniformMatrix3fv(uniform Uniform, transpose bool, value [9]float32) {
+	gl.UniformMatrix3fv(int32(uniform), 1, transpose, &value[0])
+}
+
+func (c *coreContext) UniformMatrix4fv(uniform Uniform, transpose bool, value [16]float32) {
+	gl.UniformMatrix4fv(int32(uniform), 1, transpose, &value[0])
 }

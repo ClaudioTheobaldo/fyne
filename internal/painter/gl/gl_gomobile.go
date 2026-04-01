@@ -49,6 +49,8 @@ type (
 	Attribute gl.Attrib
 	// Buffer represents a GL buffer
 	Buffer gl.Buffer
+	// Framebuffer represents a GL framebuffer object
+	Framebuffer gl.Framebuffer
 	// Program represents a compiled GL program
 	Program gl.Program
 	// Shader represents a GL shader
@@ -61,7 +63,14 @@ var (
 	compiled          []ProgramState // avoid multiple compilations with the re-used mobile GUI context
 	noBuffer          = Buffer{}
 	noShader          = Shader{}
+	noFramebuffer     = Framebuffer{}
 	textureFilterToGL = [...]int32{gl.Linear, gl.Nearest, gl.Linear}
+)
+
+const (
+	glFramebuffer       uint32 = 0x8D40 // GL_FRAMEBUFFER
+	colorAttachment0    uint32 = 0x8CE0 // GL_COLOR_ATTACHMENT0
+	framebufferComplete uint32 = 0x8CD5 // GL_FRAMEBUFFER_COMPLETE
 )
 
 func (p *painter) glctx() gl.Context {
@@ -164,6 +173,7 @@ func (p *painter) Init() {
 	p.arcProgram = compiled[5]
 
 	p.shaderCache = make(map[string]*ProgramState)
+	p.initEffectPipeline()
 }
 
 func (p *painter) getUniformLocations(pState ProgramState, names ...string) {
@@ -391,6 +401,38 @@ func (c *mobileContext) VertexAttribPointerWithOffset(attribute Attribute, size 
 
 func (c *mobileContext) Viewport(x, y, width, height int) {
 	c.glContext.Viewport(x, y, width, height)
+}
+
+func (c *mobileContext) CreateFramebuffer() Framebuffer {
+	return Framebuffer(c.glContext.CreateFramebuffer())
+}
+
+func (c *mobileContext) DeleteFramebuffer(fb Framebuffer) {
+	c.glContext.DeleteFramebuffer(gl.Framebuffer(fb))
+}
+
+func (c *mobileContext) BindFramebuffer(target uint32, fb Framebuffer) {
+	c.glContext.BindFramebuffer(gl.Enum(target), gl.Framebuffer(fb))
+}
+
+func (c *mobileContext) FramebufferTexture2D(target, attachment, textarget uint32, texture Texture, level int) {
+	c.glContext.FramebufferTexture2D(gl.Enum(target), gl.Enum(attachment), gl.Enum(textarget), gl.Texture(texture), level)
+}
+
+func (c *mobileContext) CheckFramebufferStatus(target uint32) uint32 {
+	return uint32(c.glContext.CheckFramebufferStatus(gl.Enum(target)))
+}
+
+func (c *mobileContext) Uniform3f(uniform Uniform, v0, v1, v2 float32) {
+	c.glContext.Uniform3f(gl.Uniform(uniform), v0, v1, v2)
+}
+
+func (c *mobileContext) UniformMatrix3fv(uniform Uniform, transpose bool, value [9]float32) {
+	c.glContext.UniformMatrix3fv(gl.Uniform(uniform), value[:])
+}
+
+func (c *mobileContext) UniformMatrix4fv(uniform Uniform, transpose bool, value [16]float32) {
+	c.glContext.UniformMatrix4fv(gl.Uniform(uniform), value[:])
 }
 
 // toLEByteOrder returns the byte representation of float32 values in little endian byte order.

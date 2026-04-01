@@ -123,6 +123,10 @@ func (p *painter) drawLine(line *canvas.Line, pos fyne.Position, frame fyne.Size
 }
 
 func (p *painter) drawObject(o fyne.CanvasObject, pos fyne.Position, frame fyne.Size) {
+	if holder, ok := o.(effectHolder); ok && holder.HasEffects() {
+		p.drawObjectWithEffects(o, pos, frame)
+		return
+	}
 	switch obj := o.(type) {
 	case *canvas.StreamingImage:
 		p.drawStreamingImage(obj, pos, frame)

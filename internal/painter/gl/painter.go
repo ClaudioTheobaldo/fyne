@@ -57,6 +57,7 @@ type painter struct {
 	pboStates             map[*canvas.StreamingImage]*pboState
 	yuvPBOStates          map[*canvas.StreamingImage]*yuvPBOState
 	shaderCache           map[string]*ProgramState // cached user shader programs keyed by fragment source
+	effectPipe            effectPipeline           // FBO-based effect rendering pipeline
 }
 
 type ProgramState struct {
@@ -94,6 +95,20 @@ func (p *painter) SetUniform2f(pState ProgramState, name string, v0, v1 float32)
 	u.prev[0] = v0
 	u.prev[1] = v1
 	p.ctx.Uniform2f(u.ref, v0, v1)
+}
+
+func (p *painter) SetUniform3f(pState ProgramState, name string, v0, v1, v2 float32) {
+	u, ok := pState.uniforms[name]
+	if !ok {
+		return
+	}
+	if u.prev[0] == v0 && u.prev[1] == v1 && u.prev[2] == v2 {
+		return
+	}
+	u.prev[0] = v0
+	u.prev[1] = v1
+	u.prev[2] = v2
+	p.ctx.Uniform3f(u.ref, v0, v1, v2)
 }
 
 func (p *painter) SetUniform4f(pState ProgramState, name string, v0, v1, v2, v3 float32) {

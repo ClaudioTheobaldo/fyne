@@ -582,3 +582,88 @@ func (ctx *context) Viewport(x, y, width, height int) {
 		},
 	})
 }
+
+func (ctx *context) CreateFramebuffer() Framebuffer {
+	return Framebuffer{Value: uint32(ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnGenFramebuffer,
+		},
+		blocking: true,
+	}))}
+}
+
+func (ctx *context) DeleteFramebuffer(v Framebuffer) {
+	ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnDeleteFramebuffer,
+			a0: uintptr(v.Value),
+		},
+	})
+}
+
+func (ctx *context) BindFramebuffer(target Enum, fb Framebuffer) {
+	ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnBindFramebuffer,
+			a0: target.c(),
+			a1: uintptr(fb.Value),
+		},
+	})
+}
+
+func (ctx *context) FramebufferTexture2D(target, attachment, textarget Enum, t Texture, level int) {
+	ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnFramebufferTexture2D,
+			a0: target.c(),
+			a1: attachment.c(),
+			a2: textarget.c(),
+			a3: t.c(),
+			a4: uintptr(level),
+		},
+	})
+}
+
+func (ctx *context) CheckFramebufferStatus(target Enum) Enum {
+	return Enum(ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnCheckFramebufferStatus,
+			a0: target.c(),
+		},
+		blocking: true,
+	}))
+}
+
+func (ctx *context) Uniform3f(dst Uniform, v0, v1, v2 float32) {
+	ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnUniform3f,
+			a0: dst.c(),
+			a1: uintptr(math.Float32bits(v0)),
+			a2: uintptr(math.Float32bits(v1)),
+			a3: uintptr(math.Float32bits(v2)),
+		},
+	})
+}
+
+func (ctx *context) UniformMatrix3fv(dst Uniform, src []float32) {
+	ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnUniformMatrix3fv,
+			a0: dst.c(),
+			a1: 1,
+		},
+		parg: unsafe.Pointer(&src[0]),
+	})
+}
+
+func (ctx *context) UniformMatrix4fv(dst Uniform, src []float32) {
+	ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnUniformMatrix4fv,
+			a0: dst.c(),
+			a1: 1,
+		},
+		parg: unsafe.Pointer(&src[0]),
+	})
+}

@@ -19,6 +19,8 @@ type Circle struct {
 	FillColor   color.Color // The circle fill color
 	StrokeColor color.Color // The circle stroke color
 	StrokeWidth float32     // The stroke width of the circle
+
+	effectList // Composable shader effects support
 }
 
 // NewCircle returns a new Circle instance
