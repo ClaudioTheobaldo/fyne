@@ -14,8 +14,10 @@ const (
 	bitColorBuffer        = gl.COLOR_BUFFER_BIT
 	bitDepthBuffer        = gl.DEPTH_BUFFER_BIT
 	clampToEdge           = gl.CLAMP_TO_EDGE
-	colorFormatRGBA       = gl.RGBA
-	colorFormatLuminance  = gl.LUMINANCE
+	colorFormatRGBA           = gl.RGBA
+	colorFormatRGB     uint32 = 0x1907 // GL_RGB
+	colorFormatLuminance      = gl.LUMINANCE
+	colorFormatLuminanceAlpha uint32 = 0x190A // GL_LUMINANCE_ALPHA
 	unpackRowLength       uint32 = 0x0CF2
 	compileStatus         = gl.COMPILE_STATUS
 	constantAlpha         = gl.CONSTANT_ALPHA
@@ -33,6 +35,7 @@ const (
 	texture0              = gl.TEXTURE0
 	texture1              = gl.TEXTURE1
 	texture2              = gl.TEXTURE2
+	texture3       uint32 = 0x84C3 // GL_TEXTURE3
 	texture2D             = gl.TEXTURE_2D
 	textureMinFilter      = gl.TEXTURE_MIN_FILTER
 	textureMagFilter      = gl.TEXTURE_MAG_FILTER
@@ -41,6 +44,7 @@ const (
 	triangles             = gl.TRIANGLES
 	triangleStrip         = gl.TRIANGLE_STRIP
 	unsignedByte          = gl.UNSIGNED_BYTE
+	unsignedShort  uint32 = 0x1403 // GL_UNSIGNED_SHORT
 	vertexShader          = gl.VERTEX_SHADER
 )
 
@@ -348,6 +352,10 @@ func (c *xjsContext) Uniform1f(uniform Uniform, v float32) {
 
 func (c *xjsContext) Uniform2f(uniform Uniform, v0, v1 float32) {
 	gl.Uniform2f(gl.Uniform(uniform), v0, v1)
+}
+
+func (c *xjsContext) Uniform3f(uniform Uniform, v0, v1, v2 float32) {
+	gl.Uniform3f(gl.Uniform(uniform), v0, v1, v2)
 }
 
 func (c *xjsContext) Uniform4f(uniform Uniform, v0, v1, v2, v3 float32) {

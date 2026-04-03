@@ -154,3 +154,75 @@ func (p *painter) destroyYUVPBOState(state *yuvPBOState) {
 	p.ctx.DeleteTexture(state.texU)
 	p.ctx.DeleteTexture(state.texV)
 }
+
+// planePBOPair holds a double-buffered PBO pair for one texture plane.
+type planePBOPair struct {
+	buffers [2]Buffer
+}
+
+// streamPBOState is the generic multi-plane PBO state for UpdateRawFrame uploads.
+// Up to 4 planes are supported; planeCount tracks how many are in use.
+type streamPBOState struct {
+	planes     [4]planePBOPair
+	textures   [4]Texture
+	planeCount int
+	index      int // current write-buffer index (0 or 1)
+	width      int
+	height     int
+	ready      bool // false until the first complete frame is available
+}
+
+// getOrCreateStreamPBO returns the streamPBOState for img, re-creating it if
+// dimensions or plane count changed.
+func (p *painter) getOrCreateStreamPBO(img *canvas.StreamingImage, planeCount, w, h int, planeSizes [4]int) *streamPBOState {
+	if p.rawPBOStates == nil {
+		p.rawPBOStates = make(map[*canvas.StreamingImage]*streamPBOState)
+	}
+
+	state, ok := p.rawPBOStates[img]
+	if ok && state.width == w && state.height == h && state.planeCount == planeCount {
+		return state
+	}
+
+	if ok {
+		p.destroyStreamPBOState(state)
+	}
+
+	state = &streamPBOState{planeCount: planeCount, width: w, height: h}
+	for pi := 0; pi < planeCount; pi++ {
+		for i := 0; i < 2; i++ {
+			state.planes[pi].buffers[i] = p.ctx.CreateBuffer()
+			p.ctx.BindBuffer(pixelUnpackBuffer, state.planes[pi].buffers[i])
+			p.ctx.BufferDataBytes(pixelUnpackBuffer, planeSizes[pi], nil, streamDraw)
+		}
+		state.textures[pi] = p.newTexture(img.ScaleMode)
+	}
+	p.ctx.BindBuffer(pixelUnpackBuffer, noBuffer)
+	p.logError()
+
+	p.rawPBOStates[img] = state
+	return state
+}
+
+// destroyStreamPBO removes streamPBOState for img.
+func (p *painter) destroyStreamPBO(img *canvas.StreamingImage) {
+	if p.rawPBOStates == nil {
+		return
+	}
+	state, ok := p.rawPBOStates[img]
+	if !ok {
+		return
+	}
+	p.destroyStreamPBOState(state)
+	delete(p.rawPBOStates, img)
+}
+
+// destroyStreamPBOState releases all GL resources in a streamPBOState.
+func (p *painter) destroyStreamPBOState(state *streamPBOState) {
+	for pi := 0; pi < state.planeCount; pi++ {
+		for i := 0; i < 2; i++ {
+			p.ctx.DeleteBuffer(state.planes[pi].buffers[i])
+		}
+		p.ctx.DeleteTexture(state.textures[pi])
+	}
+}

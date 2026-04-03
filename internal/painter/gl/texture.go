@@ -26,6 +26,7 @@ func (p *painter) freeTexture(obj fyne.CanvasObject) {
 	if si, ok := obj.(*canvas.StreamingImage); ok {
 		p.destroyPBO(si)
 		p.destroyYUVPBO(si)
+		p.destroyStreamPBO(si)
 	}
 
 	texture, ok := cache.GetTexture(obj)

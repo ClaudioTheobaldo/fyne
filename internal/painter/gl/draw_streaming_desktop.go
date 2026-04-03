@@ -10,6 +10,112 @@ import (
 	"fyne.io/fyne/v2/internal/cache"
 )
 
+// glFormatBytesPerTexel returns the number of bytes per texel for common GL
+// internal formats used in streaming uploads.
+func glFormatBytesPerTexel(glFormat uint32) int {
+	switch glFormat {
+	case fdLumA: // GL_LUMINANCE_ALPHA = 0x190A: 2 bytes/texel
+		return 2
+	case fdRGB: // GL_RGB = 0x1907: 3 bytes/texel
+		return 3
+	case fdRGBA: // GL_RGBA = 0x1908: 4 bytes/texel
+		return 4
+	default: // fdLum (GL_LUMINANCE = 0x1909) and unknown: 1 byte/texel
+		return 1
+	}
+}
+
+// uploadGenericPlane writes plane data into the write PBO, then uploads from
+// the read PBO into the texture at the specified texture unit.
+// w and h are the texture dimensions in texels; stride is the raw byte row length.
+// glFormat and glType are the GL format and data type constants.
+func (p *painter) uploadGenericPlane(
+	pbo planePBOPair, tex Texture, writeIdx, readIdx int,
+	w, h, stride, bytesPerTexel int,
+	data []byte, ready bool,
+	glFormat, glType, texUnit uint32,
+) Texture {
+	pixelSize := stride * h
+
+	p.ctx.BindBuffer(pixelUnpackBuffer, pbo.buffers[writeIdx])
+	p.ctx.BufferDataBytes(pixelUnpackBuffer, pixelSize, nil, streamDraw)
+	ptr := p.ctx.MapBuffer(pixelUnpackBuffer, writeOnly)
+	if ptr != nil {
+		dst := unsafe.Slice((*byte)(ptr), pixelSize)
+		copy(dst, data[:pixelSize])
+		p.ctx.UnmapBuffer(pixelUnpackBuffer)
+	}
+
+	rowLenTexels := stride / bytesPerTexel
+	if rowLenTexels != w {
+		p.ctx.PixelStorei(unpackRowLength, int32(rowLenTexels))
+	}
+
+	p.ctx.ActiveTexture(texUnit)
+	p.ctx.BindTexture(texture2D, tex)
+	if ready {
+		p.ctx.BindBuffer(pixelUnpackBuffer, pbo.buffers[readIdx])
+		p.ctx.TexSubImage2DPBO(texture2D, 0, 0, 0, w, h, glFormat, glType)
+	} else {
+		p.ctx.BindBuffer(pixelUnpackBuffer, pbo.buffers[writeIdx])
+		p.ctx.TexImage2DPBO(texture2D, 0, w, h, glFormat, glType)
+	}
+
+	if rowLenTexels != w {
+		p.ctx.PixelStorei(unpackRowLength, 0)
+	}
+
+	p.ctx.BindBuffer(pixelUnpackBuffer, noBuffer)
+	p.logError()
+	return tex
+}
+
+// uploadStreamingRawFrame uploads all planes of a RawFrame via PBO double-buffering
+// according to the format descriptor. Returns the uploaded textures (up to 4).
+func (p *painter) uploadStreamingRawFrame(img *canvas.StreamingImage, frame *canvas.RawFrame, desc formatDescriptor) [4]Texture {
+	w := frame.Width
+	h := frame.Height
+
+	// Compute per-plane sizes and create/reuse PBO state
+	var planeSizes [4]int
+	for pi := 0; pi < desc.planeCount; pi++ {
+		planeW := w / desc.chromaWDiv[pi]
+		planeH := h / desc.chromaHDiv[pi]
+		bpt := glFormatBytesPerTexel(desc.planeFormats[pi])
+		if frame.Strides[pi] > 0 {
+			planeSizes[pi] = frame.Strides[pi] * planeH
+		} else {
+			planeSizes[pi] = planeW * planeH * bpt
+		}
+	}
+
+	state := p.getOrCreateStreamPBO(img, desc.planeCount, w, h, planeSizes)
+	writeIdx := state.index
+	readIdx := 1 - writeIdx
+
+	for pi := 0; pi < desc.planeCount; pi++ {
+		planeW := w / desc.chromaWDiv[pi]
+		planeH := h / desc.chromaHDiv[pi]
+		bpt := glFormatBytesPerTexel(desc.planeFormats[pi])
+		stride := frame.Strides[pi]
+		if stride == 0 {
+			stride = planeW * bpt
+		}
+		texUnits := [4]uint32{texture0, texture1, texture2, texture3}
+		state.textures[pi] = p.uploadGenericPlane(
+			state.planes[pi], state.textures[pi], writeIdx, readIdx,
+			planeW, planeH, stride, bpt,
+			frame.Data[pi], state.ready,
+			desc.planeFormats[pi], desc.planeDataTypes[pi], texUnits[pi],
+		)
+	}
+
+	state.ready = true
+	state.index = 1 - state.index
+	img.SetTextureSize(w, h)
+	return state.textures
+}
+
 // uploadSinglePlane writes a single-channel plane into the write PBO and uploads
 // from the read PBO to the given texture. Returns the texture.
 func (p *painter) uploadSinglePlane(

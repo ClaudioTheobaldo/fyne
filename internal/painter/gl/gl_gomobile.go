@@ -14,8 +14,10 @@ const (
 	bitColorBuffer        = gl.ColorBufferBit
 	bitDepthBuffer        = gl.DepthBufferBit
 	clampToEdge           = gl.ClampToEdge
-	colorFormatRGBA       = gl.RGBA
-	colorFormatLuminance  = gl.Luminance
+	colorFormatRGBA           = gl.RGBA
+	colorFormatRGB            = gl.Enum(0x1907) // GL_RGB
+	colorFormatLuminance      = gl.Luminance
+	colorFormatLuminanceAlpha = gl.Enum(0x190A) // GL_LUMINANCE_ALPHA
 	unpackRowLength       uint32 = 0x0CF2
 	compileStatus         = gl.CompileStatus
 	constantAlpha         = gl.ConstantAlpha
@@ -33,6 +35,7 @@ const (
 	texture0              = gl.Texture0
 	texture1              = gl.Texture1
 	texture2              = gl.Texture2
+	texture3       uint32 = 0x84C3 // GL_TEXTURE3
 	texture2D             = gl.Texture2D
 	textureMinFilter      = gl.TextureMinFilter
 	textureMagFilter      = gl.TextureMagFilter
@@ -41,6 +44,7 @@ const (
 	triangles             = gl.Triangles
 	triangleStrip         = gl.TriangleStrip
 	unsignedByte          = gl.UnsignedByte
+	unsignedShort         = gl.Enum(0x1403) // GL_UNSIGNED_SHORT (not in mobile GL consts)
 	vertexShader          = gl.VertexShader
 )
 
@@ -373,6 +377,11 @@ func (c *mobileContext) Uniform1f(uniform Uniform, v float32) {
 
 func (c *mobileContext) Uniform2f(uniform Uniform, v0, v1 float32) {
 	c.glContext.Uniform2f(gl.Uniform(uniform), v0, v1)
+}
+
+func (c *mobileContext) Uniform3f(_ Uniform, _, _, _ float32) {
+	// mobile GL interface does not expose Uniform3f; new multi-plane shaders
+	// are not yet supported on mobile. TODO: add Uniform3f to mobile GL interface.
 }
 
 func (c *mobileContext) Uniform4f(uniform Uniform, v0, v1, v2, v3 float32) {

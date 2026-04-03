@@ -34,6 +34,27 @@ var (
 
 	//go:embed shaders/yuv420p.frag
 	shaderYuv420pFrag []byte
+
+	//go:embed shaders/yuv_planar.frag
+	shaderYuvPlanarFrag []byte
+
+	//go:embed shaders/yuva_planar.frag
+	shaderYuvaPlanarFrag []byte
+
+	//go:embed shaders/nv_semiplanar.frag
+	shaderNvSemiplanarFrag []byte
+
+	//go:embed shaders/packed_yuv422.frag
+	shaderPackedYuv422Frag []byte
+
+	//go:embed shaders/grayscale.frag
+	shaderGrayscaleFrag []byte
+
+	//go:embed shaders/yuv_planar_hibit.frag
+	shaderYuvPlanarHibitFrag []byte
+
+	//go:embed shaders/nv_semiplanar_hibit.frag
+	shaderNvSemiplanarHibitFrag []byte
 )
 
 func shaderSourceNamed(name string) ([]byte, []byte) {
@@ -52,6 +73,20 @@ func shaderSourceNamed(name string) ([]byte, []byte) {
 		return shaderRectangleVert, shaderArcFrag
 	case "yuv420p":
 		return shaderSimpleVert, shaderYuv420pFrag
+	case "yuv_planar":
+		return shaderSimpleVert, shaderYuvPlanarFrag
+	case "yuva_planar":
+		return shaderSimpleVert, shaderYuvaPlanarFrag
+	case "nv_semiplanar":
+		return shaderSimpleVert, shaderNvSemiplanarFrag
+	case "packed_yuv422":
+		return shaderSimpleVert, shaderPackedYuv422Frag
+	case "grayscale":
+		return shaderSimpleVert, shaderGrayscaleFrag
+	case "yuv_planar_hibit":
+		return shaderSimpleVert, shaderYuvPlanarHibitFrag
+	case "nv_semiplanar_hibit":
+		return shaderSimpleVert, shaderNvSemiplanarHibitFrag
 	}
 	return nil, nil
 }

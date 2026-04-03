@@ -1,6 +1,7 @@
 package gl
 
 import (
+	"image"
 	"image/color"
 	"math"
 	"sync/atomic"
@@ -390,11 +391,21 @@ func (p *painter) drawText(text *canvas.Text, pos fyne.Position, frame fyne.Size
 }
 
 func (p *painter) drawStreamingImage(img *canvas.StreamingImage, pos fyne.Position, frame fyne.Size) {
+	// Generic raw-frame path: handles all PixelFormat values via UpdateRawFrame.
+	rawFrame := img.ConsumePendingRawFrame()
+	hasRawState := p.rawPBOStates != nil && p.rawPBOStates[img] != nil && p.rawPBOStates[img].ready
+	if rawFrame != nil || hasRawState {
+		p.drawStreamingImageRaw(img, rawFrame, pos, frame)
+		return
+	}
+
+	// Legacy YUV420P path (UpdateYUVFrame).
 	if img.PixelFormat == canvas.PixelFormatYUV420P {
 		p.drawStreamingImageYUV(img, pos, frame)
 		return
 	}
 
+	// Legacy RGBA path (UpdateFrame).
 	t0 := time.Now()
 	defer func() {
 		BenchStreamDrawNs.Add(time.Since(t0).Nanoseconds())
@@ -413,6 +424,337 @@ func (p *painter) drawStreamingImage(img *canvas.StreamingImage, pos fyne.Positi
 	}
 
 	p.drawQuadWithTexture(texture, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()), 0, 0)
+}
+
+// drawStreamingImageRaw draws a StreamingImage using the generic RawFrame path.
+// rawFrame may be nil when repainting with no new data (uses cached GPU state).
+func (p *painter) drawStreamingImageRaw(img *canvas.StreamingImage, rawFrame *canvas.RawFrame, pos fyne.Position, frame fyne.Size) {
+	t0 := time.Now()
+	defer func() {
+		BenchStreamDrawNs.Add(time.Since(t0).Nanoseconds())
+		BenchStreamDrawCount.Add(1)
+	}()
+
+	desc := formatDescriptorFor(img.PixelFormat)
+	colorRange := img.ColorRange
+	if colorRange == 0 && desc.defaultRange != 0 {
+		colorRange = desc.defaultRange
+	}
+
+	switch desc.category {
+	case categorySimple:
+		var texture Texture
+		if rawFrame != nil {
+			stride := rawFrame.Strides[0]
+			if stride == 0 {
+				stride = rawFrame.Width * 4
+			}
+			rgba := &image.RGBA{Pix: rawFrame.Data[0], Stride: stride,
+				Rect: image.Rect(0, 0, rawFrame.Width, rawFrame.Height)}
+			texture = p.uploadStreamingFrame(img, rgba)
+		} else if existingTex, cached := cache.GetTexture(img); cached {
+			texture = Texture(existingTex)
+		} else {
+			return
+		}
+		p.drawQuadWithTexture(texture, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()), 0, 0)
+
+	case categoryCPUConvert:
+		var texture Texture
+		if rawFrame != nil {
+			rgba := convertRawToRGBA(img.PixelFormat, rawFrame)
+			if rgba == nil {
+				return
+			}
+			texture = p.uploadStreamingFrame(img, rgba)
+		} else if existingTex, cached := cache.GetTexture(img); cached {
+			texture = Texture(existingTex)
+		} else {
+			return
+		}
+		p.drawQuadWithTexture(texture, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()), 0, 0)
+
+	case categoryYUVPlanar:
+		cm := ComputeColorMatrix(img.ColorSpace, colorRange, desc.bitDepth)
+		var textures [4]Texture
+		if rawFrame != nil {
+			textures = p.uploadStreamingRawFrame(img, rawFrame, desc)
+		} else if state := p.rawPBOStates[img]; state != nil {
+			textures = state.textures
+		} else {
+			return
+		}
+		p.drawQuadWithYUVPlanar(textures, cm, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()))
+
+	case categoryYUVAPlanar:
+		cm := ComputeColorMatrix(img.ColorSpace, colorRange, desc.bitDepth)
+		var textures [4]Texture
+		if rawFrame != nil {
+			textures = p.uploadStreamingRawFrame(img, rawFrame, desc)
+		} else if state := p.rawPBOStates[img]; state != nil {
+			textures = state.textures
+		} else {
+			return
+		}
+		p.drawQuadWithYUVAPlanar(textures, cm, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()))
+
+	case categoryNVSemiplanar:
+		cm := ComputeColorMatrix(img.ColorSpace, colorRange, 8)
+		swapUV := float32(0)
+		if desc.swapUV {
+			swapUV = 1
+		}
+		var textures [4]Texture
+		if rawFrame != nil {
+			textures = p.uploadStreamingRawFrame(img, rawFrame, desc)
+		} else if state := p.rawPBOStates[img]; state != nil {
+			textures = state.textures
+		} else {
+			return
+		}
+		p.drawQuadWithNVSemiplanar(textures, swapUV, cm, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()))
+
+	case categoryPackedYUV422:
+		cm := ComputeColorMatrix(img.ColorSpace, colorRange, 8)
+		var textures [4]Texture
+		if rawFrame != nil {
+			textures = p.uploadStreamingRawFrame(img, rawFrame, desc)
+		} else if state := p.rawPBOStates[img]; state != nil {
+			textures = state.textures
+		} else {
+			return
+		}
+		texW, _ := img.TextureSize()
+		texPackedWidth := float32(texW) // actual width set after upload
+		if rawFrame != nil {
+			texPackedWidth = float32(rawFrame.Width / desc.chromaWDiv[0])
+		}
+		p.drawQuadWithPackedYUV422(textures[0], float32(desc.packingMode), texPackedWidth, cm,
+			pos, img.Size(), frame, img.FillMode, float32(img.Alpha()))
+
+	case categoryGrayscale:
+		bitMax := float32(1.0)
+		if desc.bitDepth == 16 {
+			bitMax = 65535.0
+		}
+		hasAlpha := float32(0)
+		if desc.hasAlpha {
+			hasAlpha = 1
+		}
+		var textures [4]Texture
+		if rawFrame != nil {
+			textures = p.uploadStreamingRawFrame(img, rawFrame, desc)
+		} else if state := p.rawPBOStates[img]; state != nil {
+			textures = state.textures
+		} else {
+			return
+		}
+		p.drawQuadWithGrayscale(textures[0], bitMax, hasAlpha, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()))
+
+	case categoryHiBitPlanar:
+		cm := ComputeColorMatrix(img.ColorSpace, colorRange, desc.bitDepth)
+		maxVal := (1 << uint(desc.bitDepth)) - 1
+		bitMax := float32(maxVal)
+		hasAlpha := float32(0)
+		if desc.hasAlpha {
+			hasAlpha = 1
+		}
+		var textures [4]Texture
+		if rawFrame != nil {
+			textures = p.uploadStreamingRawFrame(img, rawFrame, desc)
+		} else if state := p.rawPBOStates[img]; state != nil {
+			textures = state.textures
+		} else {
+			return
+		}
+		p.drawQuadWithHiBitPlanar(textures, bitMax, hasAlpha, cm, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()))
+
+	case categoryHiBitNV:
+		cm := ComputeColorMatrix(img.ColorSpace, colorRange, desc.bitDepth)
+		maxValNV := (1 << uint(desc.bitDepth)) - 1
+		bitMax := float32(maxValNV)
+		swapUV := float32(0)
+		if desc.swapUV {
+			swapUV = 1
+		}
+		var textures [4]Texture
+		if rawFrame != nil {
+			textures = p.uploadStreamingRawFrame(img, rawFrame, desc)
+		} else if state := p.rawPBOStates[img]; state != nil {
+			textures = state.textures
+		} else {
+			return
+		}
+		p.drawQuadWithHiBitNV(textures, bitMax, swapUV, cm, pos, img.Size(), frame, img.FillMode, float32(img.Alpha()))
+	}
+}
+
+// setColorMatrixUniforms uploads the 4 color-matrix vec3 uniforms.
+func (p *painter) setColorMatrixUniforms(prog ProgramState, cm ColorMatrix) {
+	p.SetUniform3f(prog, "colorRow0", cm.Row0[0], cm.Row0[1], cm.Row0[2])
+	p.SetUniform3f(prog, "colorRow1", cm.Row1[0], cm.Row1[1], cm.Row1[2])
+	p.SetUniform3f(prog, "colorRow2", cm.Row2[0], cm.Row2[1], cm.Row2[2])
+	p.SetUniform3f(prog, "colorOffset", cm.Offset[0], cm.Offset[1], cm.Offset[2])
+}
+
+// setStreamProgramBase sets the geometry/alpha uniforms shared by all streaming programs.
+func (p *painter) setStreamProgramBase(prog ProgramState, points []float32, inner fyne.Size, insets [4]float32, alpha float32) {
+	p.updateBuffer(prog.buff, points)
+	p.UpdateVertexArray(prog, "vert", 3, 5, 0)
+	p.UpdateVertexArray(prog, "vertTexCoord", 2, 5, 3)
+	p.SetUniform1f(prog, "cornerRadius", 0)
+	p.SetUniform2f(prog, "size", inner.Width*p.pixScale, inner.Height*p.pixScale)
+	p.SetUniform4f(prog, "inset", insets[0], insets[1], insets[2], insets[3])
+	p.SetUniform1f(prog, "alpha", alpha)
+}
+
+func (p *painter) drawQuadWithYUVPlanar(textures [4]Texture, cm ColorMatrix, pos fyne.Position, size, frame fyne.Size, fill canvas.ImageFill, alpha float32) {
+	points, insets := p.rectCoords(size, pos, frame, fill, 0, 0)
+	inner, _ := rectInnerCoords(size, pos, fill, 0)
+	prog := p.yuvPlanarProgram
+
+	p.ctx.UseProgram(prog.ref)
+	p.setStreamProgramBase(prog, points, inner, insets, alpha)
+	p.setColorMatrixUniforms(prog, cm)
+	p.ctx.BlendFunc(one, oneMinusSrcAlpha)
+
+	p.ctx.ActiveTexture(texture0)
+	p.ctx.BindTexture(texture2D, textures[0])
+	p.ctx.ActiveTexture(texture1)
+	p.ctx.BindTexture(texture2D, textures[1])
+	p.ctx.ActiveTexture(texture2)
+	p.ctx.BindTexture(texture2D, textures[2])
+	p.ctx.DrawArrays(triangleStrip, 0, 4)
+	p.ctx.ActiveTexture(texture0)
+	p.logError()
+}
+
+func (p *painter) drawQuadWithYUVAPlanar(textures [4]Texture, cm ColorMatrix, pos fyne.Position, size, frame fyne.Size, fill canvas.ImageFill, alpha float32) {
+	points, insets := p.rectCoords(size, pos, frame, fill, 0, 0)
+	inner, _ := rectInnerCoords(size, pos, fill, 0)
+	prog := p.yuvaPlanarProgram
+
+	p.ctx.UseProgram(prog.ref)
+	p.setStreamProgramBase(prog, points, inner, insets, alpha)
+	p.setColorMatrixUniforms(prog, cm)
+	p.ctx.BlendFunc(one, oneMinusSrcAlpha)
+
+	p.ctx.ActiveTexture(texture0)
+	p.ctx.BindTexture(texture2D, textures[0])
+	p.ctx.ActiveTexture(texture1)
+	p.ctx.BindTexture(texture2D, textures[1])
+	p.ctx.ActiveTexture(texture2)
+	p.ctx.BindTexture(texture2D, textures[2])
+	p.ctx.ActiveTexture(texture3)
+	p.ctx.BindTexture(texture2D, textures[3])
+	p.ctx.DrawArrays(triangleStrip, 0, 4)
+	p.ctx.ActiveTexture(texture0)
+	p.logError()
+}
+
+func (p *painter) drawQuadWithNVSemiplanar(textures [4]Texture, swapUV float32, cm ColorMatrix, pos fyne.Position, size, frame fyne.Size, fill canvas.ImageFill, alpha float32) {
+	points, insets := p.rectCoords(size, pos, frame, fill, 0, 0)
+	inner, _ := rectInnerCoords(size, pos, fill, 0)
+	prog := p.nvSemiplanarProgram
+
+	p.ctx.UseProgram(prog.ref)
+	p.setStreamProgramBase(prog, points, inner, insets, alpha)
+	p.setColorMatrixUniforms(prog, cm)
+	p.SetUniform1f(prog, "swapUV", swapUV)
+	p.ctx.BlendFunc(one, oneMinusSrcAlpha)
+
+	p.ctx.ActiveTexture(texture0)
+	p.ctx.BindTexture(texture2D, textures[0])
+	p.ctx.ActiveTexture(texture1)
+	p.ctx.BindTexture(texture2D, textures[1])
+	p.ctx.DrawArrays(triangleStrip, 0, 4)
+	p.ctx.ActiveTexture(texture0)
+	p.logError()
+}
+
+func (p *painter) drawQuadWithPackedYUV422(tex Texture, packingMode, texPackedWidth float32, cm ColorMatrix, pos fyne.Position, size, frame fyne.Size, fill canvas.ImageFill, alpha float32) {
+	points, insets := p.rectCoords(size, pos, frame, fill, 0, 0)
+	inner, _ := rectInnerCoords(size, pos, fill, 0)
+	prog := p.packedYUV422Program
+
+	p.ctx.UseProgram(prog.ref)
+	p.setStreamProgramBase(prog, points, inner, insets, alpha)
+	p.setColorMatrixUniforms(prog, cm)
+	p.SetUniform1f(prog, "packingMode", packingMode)
+	p.SetUniform1f(prog, "texPackedWidth", texPackedWidth)
+	p.ctx.BlendFunc(one, oneMinusSrcAlpha)
+
+	p.ctx.ActiveTexture(texture0)
+	p.ctx.BindTexture(texture2D, tex)
+	p.ctx.DrawArrays(triangleStrip, 0, 4)
+	p.ctx.ActiveTexture(texture0)
+	p.logError()
+}
+
+func (p *painter) drawQuadWithGrayscale(tex Texture, bitMax, hasAlpha float32, pos fyne.Position, size, frame fyne.Size, fill canvas.ImageFill, alpha float32) {
+	points, insets := p.rectCoords(size, pos, frame, fill, 0, 0)
+	inner, _ := rectInnerCoords(size, pos, fill, 0)
+	prog := p.grayscaleProgram
+
+	p.ctx.UseProgram(prog.ref)
+	p.setStreamProgramBase(prog, points, inner, insets, alpha)
+	p.SetUniform1f(prog, "bitMax", bitMax)
+	p.SetUniform1f(prog, "hasAlpha", hasAlpha)
+	p.ctx.BlendFunc(one, oneMinusSrcAlpha)
+
+	p.ctx.ActiveTexture(texture0)
+	p.ctx.BindTexture(texture2D, tex)
+	p.ctx.DrawArrays(triangleStrip, 0, 4)
+	p.ctx.ActiveTexture(texture0)
+	p.logError()
+}
+
+func (p *painter) drawQuadWithHiBitPlanar(textures [4]Texture, bitMax, hasAlpha float32, cm ColorMatrix, pos fyne.Position, size, frame fyne.Size, fill canvas.ImageFill, alpha float32) {
+	points, insets := p.rectCoords(size, pos, frame, fill, 0, 0)
+	inner, _ := rectInnerCoords(size, pos, fill, 0)
+	prog := p.yuvPlanarHibitProgram
+
+	p.ctx.UseProgram(prog.ref)
+	p.setStreamProgramBase(prog, points, inner, insets, alpha)
+	p.setColorMatrixUniforms(prog, cm)
+	p.SetUniform1f(prog, "bitMax", bitMax)
+	p.SetUniform1f(prog, "hasAlpha", hasAlpha)
+	p.ctx.BlendFunc(one, oneMinusSrcAlpha)
+
+	p.ctx.ActiveTexture(texture0)
+	p.ctx.BindTexture(texture2D, textures[0])
+	p.ctx.ActiveTexture(texture1)
+	p.ctx.BindTexture(texture2D, textures[1])
+	p.ctx.ActiveTexture(texture2)
+	p.ctx.BindTexture(texture2D, textures[2])
+	if hasAlpha > 0.5 {
+		p.ctx.ActiveTexture(texture3)
+		p.ctx.BindTexture(texture2D, textures[3])
+	}
+	p.ctx.DrawArrays(triangleStrip, 0, 4)
+	p.ctx.ActiveTexture(texture0)
+	p.logError()
+}
+
+func (p *painter) drawQuadWithHiBitNV(textures [4]Texture, bitMax, swapUV float32, cm ColorMatrix, pos fyne.Position, size, frame fyne.Size, fill canvas.ImageFill, alpha float32) {
+	points, insets := p.rectCoords(size, pos, frame, fill, 0, 0)
+	inner, _ := rectInnerCoords(size, pos, fill, 0)
+	prog := p.nvSemiplanarHibitProgram
+
+	p.ctx.UseProgram(prog.ref)
+	p.setStreamProgramBase(prog, points, inner, insets, alpha)
+	p.setColorMatrixUniforms(prog, cm)
+	p.SetUniform1f(prog, "bitMax", bitMax)
+	p.SetUniform1f(prog, "swapUV", swapUV)
+	p.ctx.BlendFunc(one, oneMinusSrcAlpha)
+
+	p.ctx.ActiveTexture(texture0)
+	p.ctx.BindTexture(texture2D, textures[0])
+	p.ctx.ActiveTexture(texture1)
+	p.ctx.BindTexture(texture2D, textures[1])
+	p.ctx.DrawArrays(triangleStrip, 0, 4)
+	p.ctx.ActiveTexture(texture0)
+	p.logError()
 }
 
 func (p *painter) drawStreamingImageYUV(img *canvas.StreamingImage, pos fyne.Position, frame fyne.Size) {

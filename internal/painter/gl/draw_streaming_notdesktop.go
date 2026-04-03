@@ -9,6 +9,115 @@ import (
 	"fyne.io/fyne/v2/internal/cache"
 )
 
+// glFormatBytesPerTexel returns the number of bytes per texel for common GL formats.
+func glFormatBytesPerTexel(glFormat uint32) int {
+	switch glFormat {
+	case fdLumA:
+		return 2
+	case fdRGB:
+		return 3
+	case fdRGBA:
+		return 4
+	default:
+		return 1
+	}
+}
+
+// uploadStreamingRawFrame uploads all planes of a RawFrame directly via TexSubImage2D.
+// This is the non-desktop (mobile/WASM) path that does not use PBOs.
+func (p *painter) uploadStreamingRawFrame(img *canvas.StreamingImage, frame *canvas.RawFrame, desc formatDescriptor) [4]Texture {
+	w := frame.Width
+	h := frame.Height
+	texUnits := [4]uint32{texture0, texture1, texture2, texture3}
+	var textures [4]Texture
+
+	for pi := 0; pi < desc.planeCount; pi++ {
+		planeW := w / desc.chromaWDiv[pi]
+		planeH := h / desc.chromaHDiv[pi]
+		bpt := glFormatBytesPerTexel(desc.planeFormats[pi])
+		stride := frame.Strides[pi]
+		if stride == 0 {
+			stride = planeW * bpt
+		}
+		data := frame.Data[pi]
+		glFmt := desc.planeFormats[pi]
+		glType := desc.planeDataTypes[pi]
+
+		p.ctx.ActiveTexture(texUnits[pi])
+		// Reuse or create texture
+		tex := p.newTexture(img.ScaleMode)
+		p.ctx.BindTexture(texture2D, tex)
+		if stride != planeW*bpt {
+			p.ctx.PixelStorei(unpackRowLength, int32(stride/bpt))
+		}
+		p.ctx.TexImage2D(texture2D, 0, planeW, planeH, glFmt, glType, data)
+		if stride != planeW*bpt {
+			p.ctx.PixelStorei(unpackRowLength, 0)
+		}
+		p.logError()
+		textures[pi] = tex
+	}
+
+	img.SetTextureSize(w, h)
+	return textures
+}
+
+// uploadStreamingYUVFrame uploads Y, U, V planes via direct TexImage2D/TexSubImage2D (no PBO).
+// This is the non-desktop path for mobile and WASM where PBOs are not available.
+func (p *painter) uploadStreamingYUVFrame(img *canvas.StreamingImage, frame *canvas.YUV420PFrame) (Texture, Texture, Texture) {
+	w := frame.Width
+	h := frame.Height
+	uvW := w / 2
+	uvH := h / 2
+
+	if p.yuvPBOStates == nil {
+		p.yuvPBOStates = make(map[*canvas.StreamingImage]*yuvPBOState)
+	}
+
+	state := p.yuvPBOStates[img]
+	firstFrame := state == nil || state.width != w || state.height != h
+	if state == nil {
+		state = &yuvPBOState{width: w, height: h}
+		state.texY = p.newTexture(img.ScaleMode)
+		state.texU = p.newTexture(img.ScaleMode)
+		state.texV = p.newTexture(img.ScaleMode)
+		p.yuvPBOStates[img] = state
+	}
+
+	p.ctx.ActiveTexture(texture0)
+	p.ctx.BindTexture(texture2D, state.texY)
+	if firstFrame {
+		p.ctx.TexImage2D(texture2D, 0, w, h, colorFormatLuminance, unsignedByte, frame.Y)
+	} else {
+		p.ctx.TexSubImage2D(texture2D, 0, 0, 0, w, h, colorFormatLuminance, unsignedByte, frame.Y)
+	}
+	p.logError()
+
+	p.ctx.ActiveTexture(texture1)
+	p.ctx.BindTexture(texture2D, state.texU)
+	if firstFrame {
+		p.ctx.TexImage2D(texture2D, 0, uvW, uvH, colorFormatLuminance, unsignedByte, frame.U)
+	} else {
+		p.ctx.TexSubImage2D(texture2D, 0, 0, 0, uvW, uvH, colorFormatLuminance, unsignedByte, frame.U)
+	}
+	p.logError()
+
+	p.ctx.ActiveTexture(texture2)
+	p.ctx.BindTexture(texture2D, state.texV)
+	if firstFrame {
+		p.ctx.TexImage2D(texture2D, 0, uvW, uvH, colorFormatLuminance, unsignedByte, frame.V)
+	} else {
+		p.ctx.TexSubImage2D(texture2D, 0, 0, 0, uvW, uvH, colorFormatLuminance, unsignedByte, frame.V)
+	}
+	p.logError()
+
+	state.width = w
+	state.height = h
+	state.ready = true
+	img.SetTextureSize(w, h)
+	return state.texY, state.texU, state.texV
+}
+
 // uploadStreamingFrame uploads frame pixels directly via TexSubImage2D (no PBO).
 // This is the fallback for platforms where PBOs are not available (WASM, mobile, GLES2).
 func (p *painter) uploadStreamingFrame(img *canvas.StreamingImage, frame *image.RGBA) Texture {

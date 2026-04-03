@@ -16,8 +16,10 @@ const (
 	bitColorBuffer        = gl.COLOR_BUFFER_BIT
 	bitDepthBuffer        = gl.DEPTH_BUFFER_BIT
 	clampToEdge           = gl.CLAMP_TO_EDGE
-	colorFormatRGBA       = gl.RGBA
-	colorFormatLuminance  = gl.LUMINANCE
+	colorFormatRGBA          = gl.RGBA
+	colorFormatRGB           = gl.RGB
+	colorFormatLuminance     = gl.LUMINANCE
+	colorFormatLuminanceAlpha = gl.LUMINANCE_ALPHA
 	unpackRowLength       = gl.UNPACK_ROW_LENGTH
 	compileStatus         = gl.COMPILE_STATUS
 	constantAlpha         = gl.CONSTANT_ALPHA
@@ -35,6 +37,7 @@ const (
 	texture0              = gl.TEXTURE0
 	texture1              = gl.TEXTURE1
 	texture2              = gl.TEXTURE2
+	texture3              = gl.TEXTURE3
 	texture2D             = gl.TEXTURE_2D
 	textureMinFilter      = gl.TEXTURE_MIN_FILTER
 	textureMagFilter      = gl.TEXTURE_MAG_FILTER
@@ -43,6 +46,7 @@ const (
 	triangles             = gl.TRIANGLES
 	triangleStrip         = gl.TRIANGLE_STRIP
 	unsignedByte          = gl.UNSIGNED_BYTE
+	unsignedShort         = gl.UNSIGNED_SHORT
 	vertexShader          = gl.VERTEX_SHADER
 )
 
@@ -159,12 +163,131 @@ func (p *painter) Init() {
 	}
 	p.getUniformLocations(p.yuvProgram, "texY", "texU", "texV", "alpha", "cornerRadius", "size", "inset")
 	p.enableAttribArrays(p.yuvProgram, "vert", "vertTexCoord")
-
-	// Bind sampler uniforms to texture units (constant, set once)
 	p.ctx.UseProgram(p.yuvProgram.ref)
-	p.ctx.Uniform1i(p.yuvProgram.uniforms["texY"].ref, 0) // TEXTURE0
-	p.ctx.Uniform1i(p.yuvProgram.uniforms["texU"].ref, 1) // TEXTURE1
-	p.ctx.Uniform1i(p.yuvProgram.uniforms["texV"].ref, 2) // TEXTURE2
+	p.ctx.Uniform1i(p.yuvProgram.uniforms["texY"].ref, 0)
+	p.ctx.Uniform1i(p.yuvProgram.uniforms["texU"].ref, 1)
+	p.ctx.Uniform1i(p.yuvProgram.uniforms["texV"].ref, 2)
+
+	// ── yuv_planar: generic 3-plane 8-bit YUV with uniform color matrix ──────
+	p.yuvPlanarProgram = ProgramState{
+		ref:        p.createProgram("yuv_planar"),
+		buff:       p.createBuffer(20),
+		uniforms:   make(map[string]*UniformState),
+		attributes: make(map[string]Attribute),
+	}
+	p.getUniformLocations(p.yuvPlanarProgram,
+		"texY", "texU", "texV",
+		"colorRow0", "colorRow1", "colorRow2", "colorOffset",
+		"alpha", "cornerRadius", "size", "inset",
+	)
+	p.enableAttribArrays(p.yuvPlanarProgram, "vert", "vertTexCoord")
+	p.ctx.UseProgram(p.yuvPlanarProgram.ref)
+	p.ctx.Uniform1i(p.yuvPlanarProgram.uniforms["texY"].ref, 0)
+	p.ctx.Uniform1i(p.yuvPlanarProgram.uniforms["texU"].ref, 1)
+	p.ctx.Uniform1i(p.yuvPlanarProgram.uniforms["texV"].ref, 2)
+
+	// ── yuva_planar: 4-plane 8-bit YUVA ──────────────────────────────────────
+	p.yuvaPlanarProgram = ProgramState{
+		ref:        p.createProgram("yuva_planar"),
+		buff:       p.createBuffer(20),
+		uniforms:   make(map[string]*UniformState),
+		attributes: make(map[string]Attribute),
+	}
+	p.getUniformLocations(p.yuvaPlanarProgram,
+		"texY", "texU", "texV", "texA",
+		"colorRow0", "colorRow1", "colorRow2", "colorOffset",
+		"alpha", "cornerRadius", "size", "inset",
+	)
+	p.enableAttribArrays(p.yuvaPlanarProgram, "vert", "vertTexCoord")
+	p.ctx.UseProgram(p.yuvaPlanarProgram.ref)
+	p.ctx.Uniform1i(p.yuvaPlanarProgram.uniforms["texY"].ref, 0)
+	p.ctx.Uniform1i(p.yuvaPlanarProgram.uniforms["texU"].ref, 1)
+	p.ctx.Uniform1i(p.yuvaPlanarProgram.uniforms["texV"].ref, 2)
+	p.ctx.Uniform1i(p.yuvaPlanarProgram.uniforms["texA"].ref, 3)
+
+	// ── nv_semiplanar: Y + interleaved UV (NV12/21/16/24/42) ─────────────────
+	p.nvSemiplanarProgram = ProgramState{
+		ref:        p.createProgram("nv_semiplanar"),
+		buff:       p.createBuffer(20),
+		uniforms:   make(map[string]*UniformState),
+		attributes: make(map[string]Attribute),
+	}
+	p.getUniformLocations(p.nvSemiplanarProgram,
+		"texY", "texUV", "swapUV",
+		"colorRow0", "colorRow1", "colorRow2", "colorOffset",
+		"alpha", "cornerRadius", "size", "inset",
+	)
+	p.enableAttribArrays(p.nvSemiplanarProgram, "vert", "vertTexCoord")
+	p.ctx.UseProgram(p.nvSemiplanarProgram.ref)
+	p.ctx.Uniform1i(p.nvSemiplanarProgram.uniforms["texY"].ref, 0)
+	p.ctx.Uniform1i(p.nvSemiplanarProgram.uniforms["texUV"].ref, 1)
+
+	// ── packed_yuv422: YUYV / UYVY / YVYU ────────────────────────────────────
+	p.packedYUV422Program = ProgramState{
+		ref:        p.createProgram("packed_yuv422"),
+		buff:       p.createBuffer(20),
+		uniforms:   make(map[string]*UniformState),
+		attributes: make(map[string]Attribute),
+	}
+	p.getUniformLocations(p.packedYUV422Program,
+		"texPacked", "packingMode", "texPackedWidth",
+		"colorRow0", "colorRow1", "colorRow2", "colorOffset",
+		"alpha", "cornerRadius", "size", "inset",
+	)
+	p.enableAttribArrays(p.packedYUV422Program, "vert", "vertTexCoord")
+	p.ctx.UseProgram(p.packedYUV422Program.ref)
+	p.ctx.Uniform1i(p.packedYUV422Program.uniforms["texPacked"].ref, 0)
+
+	// ── grayscale: GRAY8 / GRAY16 / YA8 ──────────────────────────────────────
+	p.grayscaleProgram = ProgramState{
+		ref:        p.createProgram("grayscale"),
+		buff:       p.createBuffer(20),
+		uniforms:   make(map[string]*UniformState),
+		attributes: make(map[string]Attribute),
+	}
+	p.getUniformLocations(p.grayscaleProgram,
+		"texGray", "bitMax", "hasAlpha",
+		"alpha", "cornerRadius", "size", "inset",
+	)
+	p.enableAttribArrays(p.grayscaleProgram, "vert", "vertTexCoord")
+	p.ctx.UseProgram(p.grayscaleProgram.ref)
+	p.ctx.Uniform1i(p.grayscaleProgram.uniforms["texGray"].ref, 0)
+
+	// ── yuv_planar_hibit: 9–16 bit planar YUV ────────────────────────────────
+	p.yuvPlanarHibitProgram = ProgramState{
+		ref:        p.createProgram("yuv_planar_hibit"),
+		buff:       p.createBuffer(20),
+		uniforms:   make(map[string]*UniformState),
+		attributes: make(map[string]Attribute),
+	}
+	p.getUniformLocations(p.yuvPlanarHibitProgram,
+		"texY", "texU", "texV", "texA", "bitMax", "hasAlpha",
+		"colorRow0", "colorRow1", "colorRow2", "colorOffset",
+		"alpha", "cornerRadius", "size", "inset",
+	)
+	p.enableAttribArrays(p.yuvPlanarHibitProgram, "vert", "vertTexCoord")
+	p.ctx.UseProgram(p.yuvPlanarHibitProgram.ref)
+	p.ctx.Uniform1i(p.yuvPlanarHibitProgram.uniforms["texY"].ref, 0)
+	p.ctx.Uniform1i(p.yuvPlanarHibitProgram.uniforms["texU"].ref, 1)
+	p.ctx.Uniform1i(p.yuvPlanarHibitProgram.uniforms["texV"].ref, 2)
+	p.ctx.Uniform1i(p.yuvPlanarHibitProgram.uniforms["texA"].ref, 3)
+
+	// ── nv_semiplanar_hibit: P010 / P012 / P016 ──────────────────────────────
+	p.nvSemiplanarHibitProgram = ProgramState{
+		ref:        p.createProgram("nv_semiplanar_hibit"),
+		buff:       p.createBuffer(20),
+		uniforms:   make(map[string]*UniformState),
+		attributes: make(map[string]Attribute),
+	}
+	p.getUniformLocations(p.nvSemiplanarHibitProgram,
+		"texY", "texUV", "bitMax", "swapUV",
+		"colorRow0", "colorRow1", "colorRow2", "colorOffset",
+		"alpha", "cornerRadius", "size", "inset",
+	)
+	p.enableAttribArrays(p.nvSemiplanarHibitProgram, "vert", "vertTexCoord")
+	p.ctx.UseProgram(p.nvSemiplanarHibitProgram.ref)
+	p.ctx.Uniform1i(p.nvSemiplanarHibitProgram.uniforms["texY"].ref, 0)
+	p.ctx.Uniform1i(p.nvSemiplanarHibitProgram.uniforms["texUV"].ref, 1)
 }
 
 func (p *painter) getUniformLocations(pState ProgramState, names ...string) {
@@ -397,6 +520,10 @@ func (c *coreContext) Uniform1f(uniform Uniform, v float32) {
 
 func (c *coreContext) Uniform2f(uniform Uniform, v0, v1 float32) {
 	gl.Uniform2f(int32(uniform), v0, v1)
+}
+
+func (c *coreContext) Uniform3f(uniform Uniform, v0, v1, v2 float32) {
+	gl.Uniform3f(int32(uniform), v0, v1, v2)
 }
 
 func (c *coreContext) Uniform4f(uniform Uniform, v0, v1, v2, v3 float32) {
