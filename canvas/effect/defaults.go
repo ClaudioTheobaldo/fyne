@@ -73,6 +73,8 @@ func DefaultUniforms(kind EffectType) []UniformMapping {
 		return []UniformMapping{{"radius", 1}, {"noiseScale", 1}}
 	case TiltShift:
 		return []UniformMapping{{"radius", 1}, {"focusY", 1}, {"focusWidth", 1}}
+	case Skew:
+		return []UniformMapping{{"skewX", 1}, {"skewY", 1}}
 
 	// Edge/Detail effects
 	case Sharpen:

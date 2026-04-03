@@ -249,7 +249,7 @@ func (p *painter) compileEffectProgram(fragSrc string) *ProgramState {
 		// Distortion
 		"pixelSize", "offset", "strength", "center", "distortion",
 		"amplitude", "frequency", "speed", "noiseScale",
-		"focusY", "focusWidth",
+		"focusY", "focusWidth", "skewX", "skewY",
 		// Detail
 		"threshold",
 		// Shadow

@@ -101,6 +101,9 @@ var effectFrostedFrag []byte
 //go:embed shaders/effects/tilt_shift.frag
 var effectTiltShiftFrag []byte
 
+//go:embed shaders/effects/skew.frag
+var effectSkewFrag []byte
+
 // --- Detail effects ---
 
 //go:embed shaders/effects/sharpen.frag
@@ -267,6 +270,8 @@ func effectShaderSource(kind effect.EffectType) []byte {
 		return effectFrostedFrag
 	case effect.TiltShift:
 		return effectTiltShiftFrag
+	case effect.Skew:
+		return effectSkewFrag
 
 	// Detail
 	case effect.Sharpen:

@@ -58,6 +58,7 @@ const (
 	RGBShift           // Random block displacement and channel shifts
 	Frosted            // Blur with noise-displaced sampling
 	TiltShift          // Position-dependent selective focus blur
+	Skew               // UV-based visual skew (skewX, skewY in tangent units)
 
 	// Edge and detail effects
 
