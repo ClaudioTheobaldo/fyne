@@ -138,9 +138,23 @@ type YUV420PFrame struct {
 }
 
 // RawFrame holds planar or packed pixel data for any PixelFormat.
-// Data holds up to 4 planes; unused planes are nil. Strides are the byte
-// widths of each plane row and may include padding. The interpretation of
+// Data holds up to 4 planes; unused planes are nil. The interpretation of
 // each plane depends on the StreamingImage.PixelFormat setting.
+//
+// Strides are the byte widths of each plane row, including any padding.
+// A zero stride means the plane is tightly packed: the painter will compute
+// the correct stride from Width and the pixel format automatically. This
+// covers the common case where data comes from a simple allocation.
+//
+// Set explicit strides when your source has row padding — for example,
+// FFmpeg's AVFrame.linesize fields:
+//
+//	img.UpdateRawFrame(&canvas.RawFrame{
+//	    Data:    [4][]byte{avFrame.Data[0], avFrame.Data[1], avFrame.Data[2]},
+//	    Strides: [4]int{avFrame.Linesize[0], avFrame.Linesize[1], avFrame.Linesize[2]},
+//	    Width:   avFrame.Width,
+//	    Height:  avFrame.Height,
+//	})
 type RawFrame struct {
 	Data    [4][]byte
 	Strides [4]int
