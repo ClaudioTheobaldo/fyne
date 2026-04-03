@@ -36,6 +36,163 @@ func NewGridLayoutWithRows(rows int) fyne.Layout {
 	return &gridLayout{Cols: rows, vertical: true}
 }
 
+// NewWeightedGridLayout returns a grid layout with proportional column widths
+// specified by the given weight values. A weight of 2 means a column is twice as
+// wide as a column with weight 1. Children are laid out left-to-right and wrap
+// to a new row when all columns are filled.
+// Children can carry ColSpan/RowSpan hints via WithSpan to span multiple cells.
+//
+// Since: 2.6
+func NewWeightedGridLayout(weights ...float32) fyne.Layout {
+	return &weightedGridLayout{weights: weights}
+}
+
+// Declare conformity with Layout interface
+var _ fyne.Layout = (*weightedGridLayout)(nil)
+
+type weightedGridLayout struct {
+	weights []float32
+}
+
+func (wg *weightedGridLayout) cols() int {
+	if len(wg.weights) == 0 {
+		return 1
+	}
+	return len(wg.weights)
+}
+
+func (wg *weightedGridLayout) resolveColWidths(containerWidth float32) []float32 {
+	cols := wg.cols()
+	padding := theme.Padding()
+	totalWeight := float32(0)
+	for _, wt := range wg.weights {
+		totalWeight += wt
+	}
+	available := containerWidth - padding*float32(cols-1)
+	widths := make([]float32, cols)
+	for i, wt := range wg.weights {
+		widths[i] = available * wt / totalWeight
+	}
+	return widths
+}
+
+func (wg *weightedGridLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	cols := wg.cols()
+	padding := theme.Padding()
+	colWidths := wg.resolveColWidths(size.Width)
+
+	type weightedCell struct {
+		obj     fyne.CanvasObject
+		colSpan int
+		rowSpan int
+	}
+	var cells []weightedCell
+	for _, obj := range objects {
+		if !obj.Visible() {
+			continue
+		}
+		hint, _ := GetHint(obj)
+		cs := hint.ColSpan
+		if cs < 1 {
+			cs = 1
+		}
+		rs := hint.RowSpan
+		if rs < 1 {
+			rs = 1
+		}
+		cells = append(cells, weightedCell{obj: obj, colSpan: cs, rowSpan: rs})
+	}
+	if len(cells) == 0 {
+		return
+	}
+
+	// Compute row heights.
+	rows := int(math.Ceil(float64(len(cells)) / float64(cols)))
+	rowHeights := make([]float32, rows)
+	col, row := 0, 0
+	for _, c := range cells {
+		if row < len(rowHeights) {
+			if h := c.obj.MinSize().Height; h > rowHeights[row] {
+				rowHeights[row] = h
+			}
+		}
+		col += c.colSpan
+		if col >= cols {
+			col = 0
+			row++
+		}
+	}
+
+	// Place cells.
+	col, row = 0, 0
+	for _, c := range cells {
+		x := float32(0)
+		for i := 0; i < col; i++ {
+			x += colWidths[i] + padding
+		}
+		y := float32(0)
+		for i := 0; i < row; i++ {
+			y += rowHeights[i] + padding
+		}
+		cellW := float32(0)
+		for i := col; i < col+c.colSpan && i < cols; i++ {
+			cellW += colWidths[i]
+			if i > col {
+				cellW += padding
+			}
+		}
+		cellH := float32(0)
+		for i := row; i < row+c.rowSpan && i < rows; i++ {
+			cellH += rowHeights[i]
+			if i > row {
+				cellH += padding
+			}
+		}
+		c.obj.Move(fyne.NewPos(x, y))
+		c.obj.Resize(fyne.NewSize(cellW, cellH))
+
+		col += c.colSpan
+		if col >= cols {
+			col = 0
+			row++
+		}
+	}
+}
+
+func (wg *weightedGridLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	cols := wg.cols()
+	padding := theme.Padding()
+
+	visible := 0
+	maxMin := fyne.NewSize(0, 0)
+	for _, obj := range objects {
+		if !obj.Visible() {
+			continue
+		}
+		visible++
+		maxMin = maxMin.Max(obj.MinSize())
+	}
+	if visible == 0 {
+		return fyne.NewSize(0, 0)
+	}
+
+	rows := int(math.Ceil(float64(visible) / float64(cols)))
+
+	// Minimum container width: the smallest-weight column must fit maxMin.Width,
+	// so total width = maxMin.Width * (totalWeight/minWeight) + padding*(cols-1).
+	totalWeight := float32(0)
+	minWeight := wg.weights[0]
+	for _, wt := range wg.weights {
+		totalWeight += wt
+		if wt < minWeight {
+			minWeight = wt
+		}
+	}
+	minWidth := maxMin.Width*totalWeight/minWeight + padding*float32(cols-1)
+	minHeight := maxMin.Height*float32(rows) + padding*float32(rows-1)
+	return fyne.NewSize(minWidth, minHeight)
+}
+
 func (g *gridLayout) horizontal() bool {
 	if g.adapt {
 		return fyne.IsHorizontal(fyne.CurrentDevice().Orientation())

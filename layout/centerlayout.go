@@ -14,11 +14,42 @@ func NewCenterLayout() fyne.Layout {
 
 // Layout is called to pack all child objects into a specified size.
 // For CenterLayout this sets all children to their minimum size, centered within the space.
+// Children carrying an Alignment hint via WithAlign override the default centering:
+//   - AlignStart  → left-aligned (horizontal), top-aligned (vertical) stays centered
+//   - AlignEnd    → right-aligned (horizontal), bottom-aligned (vertical) stays centered
+//   - AlignCenter → explicitly centered (same as default)
+//   - AlignStretch → stretched to fill the full container size
 func (c *centerLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	for _, child := range objects {
+		hint, hasHint := GetHint(child)
 		childMin := child.MinSize()
-		child.Resize(childMin)
-		child.Move(fyne.NewPos((size.Width-childMin.Width)/2, (size.Height-childMin.Height)/2))
+
+		var w, h float32
+		if hasHint && hint.Align == AlignStretch {
+			w, h = size.Width, size.Height
+		} else {
+			w, h = childMin.Width, childMin.Height
+		}
+		child.Resize(fyne.NewSize(w, h))
+
+		var x, y float32
+		if hasHint {
+			switch hint.Align {
+			case AlignStart:
+				x = 0
+			case AlignEnd:
+				x = size.Width - w
+			case AlignStretch:
+				x = 0
+			default: // AlignDefault, AlignCenter
+				x = (size.Width - w) / 2
+			}
+		} else {
+			x = (size.Width - w) / 2
+		}
+		y = (size.Height - h) / 2
+
+		child.Move(fyne.NewPos(x, y))
 	}
 }
 

@@ -122,3 +122,40 @@ func NewStack(objects ...fyne.CanvasObject) *fyne.Container {
 func NewVBox(objects ...fyne.CanvasObject) *fyne.Container {
 	return New(layout.NewVBoxLayout(), objects...)
 }
+
+// NewFlexHBox creates a new container with the specified objects laid out
+// horizontally using the flex-aware HBox layout. Children can carry grow,
+// shrink, align and margin hints via layout.WithGrow, layout.WithFlex etc.
+//
+// Since: 2.6
+func NewFlexHBox(objects ...fyne.CanvasObject) *fyne.Container {
+	return New(layout.NewFlexHBoxLayout(), objects...)
+}
+
+// NewFlexVBox creates a new container with the specified objects laid out
+// vertically using the flex-aware VBox layout. Children can carry grow,
+// shrink, align and margin hints via layout.WithGrow, layout.WithFlex etc.
+//
+// Since: 2.6
+func NewFlexVBox(objects ...fyne.CanvasObject) *fyne.Container {
+	return New(layout.NewFlexVBoxLayout(), objects...)
+}
+
+// NewFlexGrid creates a new container with the specified objects laid out
+// using a CSS Grid-like layout with the given column track sizes.
+// Use layout.Fr(n) for fractional columns and layout.Fixed(n) for fixed-width ones.
+//
+// Since: 2.6
+func NewFlexGrid(columns []layout.TrackSize, objects ...fyne.CanvasObject) *fyne.Container {
+	return New(layout.NewFlexGridLayout(columns), objects...)
+}
+
+// NewWeightedGrid creates a new container with the specified objects laid out
+// in a grid where column widths are proportional to the given weights.
+//
+// Since: 2.6
+func NewWeightedGrid(weights []float32, objects ...fyne.CanvasObject) *fyne.Container {
+	wf := make([]float32, len(weights))
+	copy(wf, weights)
+	return New(layout.NewWeightedGridLayout(wf...), objects...)
+}
