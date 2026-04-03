@@ -125,6 +125,45 @@ var effectMirrorFrag []byte
 //go:embed shaders/effects/kaleidoscope.frag
 var effectKaleidoscopeFrag []byte
 
+// --- Compositing effects ---
+
+//go:embed shaders/effects/color_replace.frag
+var effectColorReplaceFrag []byte
+
+//go:embed shaders/effects/duotone.frag
+var effectDuotoneFrag []byte
+
+//go:embed shaders/effects/split_tone.frag
+var effectSplitToneFrag []byte
+
+//go:embed shaders/effects/channel_mixer.frag
+var effectChannelMixerFrag []byte
+
+// --- Additional procedural ---
+
+//go:embed shaders/effects/gradient_map.frag
+var effectGradientMapFrag []byte
+
+//go:embed shaders/effects/pattern_overlay.frag
+var effectPatternOverlayFrag []byte
+
+//go:embed shaders/effects/noise_displacement.frag
+var effectNoiseDisplacementFrag []byte
+
+// --- Time-based ---
+
+//go:embed shaders/effects/shimmer.frag
+var effectShimmerFrag []byte
+
+//go:embed shaders/effects/pulse.frag
+var effectPulseFrag []byte
+
+//go:embed shaders/effects/glitch.frag
+var effectGlitchFrag []byte
+
+//go:embed shaders/effects/matrix_rain.frag
+var effectMatrixRainFrag []byte
+
 // --- Detail effects ---
 
 //go:embed shaders/effects/sharpen.frag
@@ -379,6 +418,34 @@ func effectShaderSource(kind effect.EffectType) []byte {
 		return effectBlendMultiplyFrag
 	case effect.BlendScreen:
 		return effectBlendScreenFrag
+
+	// Compositing
+	case effect.ColorReplace:
+		return effectColorReplaceFrag
+	case effect.Duotone:
+		return effectDuotoneFrag
+	case effect.SplitTone:
+		return effectSplitToneFrag
+	case effect.ChannelMixer:
+		return effectChannelMixerFrag
+
+	// Additional procedural
+	case effect.GradientMap:
+		return effectGradientMapFrag
+	case effect.PatternOverlay:
+		return effectPatternOverlayFrag
+	case effect.NoiseDisplacement:
+		return effectNoiseDisplacementFrag
+
+	// Time-based
+	case effect.Shimmer:
+		return effectShimmerFrag
+	case effect.Pulse:
+		return effectPulseFrag
+	case effect.Glitch:
+		return effectGlitchFrag
+	case effect.MatrixRain:
+		return effectMatrixRainFrag
 	}
 	return nil
 }

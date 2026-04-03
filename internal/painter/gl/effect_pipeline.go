@@ -252,6 +252,14 @@ func (p *painter) compileEffectProgram(fragSrc string) *ProgramState {
 		"focusY", "focusWidth", "skewX", "skewY",
 		"scaleX", "scaleY", "flipX", "flipY", "segments", "rotation",
 		"curl", "phase",
+		// Compositing
+		"sourceColor", "targetColor", "tolerance",
+		"darkColor", "lightColor", "shadowTint", "highlightTint", "balance",
+		"redOut", "greenOut", "blueOut",
+		"color0", "color1", "color2", "color3", "color4",
+		"patternType", "time",
+		"brightMin", "brightMax", "scaleMin", "scaleMax",
+		"blockSize", "width",
 		// Detail
 		"threshold",
 		// Shadow

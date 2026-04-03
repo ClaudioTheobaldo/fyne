@@ -184,6 +184,34 @@ func DefaultUniforms(kind EffectType) []UniformMapping {
 	case ColorMatrix:
 		// 20 values for 5x4 matrix, passed as mat4 + extra vec4
 		return []UniformMapping{{"matrix", 4}, {"matrix2", 4}, {"matrix3", 4}, {"matrix4", 4}, {"matrixOffset", 4}}
+
+	// Compositing
+	case ColorReplace:
+		return []UniformMapping{{"sourceColor", 3}, {"targetColor", 3}, {"tolerance", 1}}
+	case Duotone:
+		return []UniformMapping{{"darkColor", 3}, {"lightColor", 3}}
+	case SplitTone:
+		return []UniformMapping{{"shadowTint", 3}, {"highlightTint", 3}, {"balance", 1}}
+	case ChannelMixer:
+		return []UniformMapping{{"redOut", 3}, {"greenOut", 3}, {"blueOut", 3}}
+
+	// Additional procedural
+	case GradientMap:
+		return []UniformMapping{{"color0", 3}, {"color1", 3}, {"color2", 3}, {"color3", 3}, {"color4", 3}}
+	case PatternOverlay:
+		return []UniformMapping{{"patternSize", 1}, {"patternType", 1}, {"opacity", 1}}
+	case NoiseDisplacement:
+		return []UniformMapping{{"amount", 1}, {"scale", 1}, {"seed", 1}}
+
+	// Time-based
+	case Shimmer:
+		return []UniformMapping{{"time", 1}, {"width", 1}, {"angle", 1}, {"intensity", 1}}
+	case Pulse:
+		return []UniformMapping{{"time", 1}, {"speed", 1}, {"brightMin", 1}, {"brightMax", 1}, {"scaleMin", 1}, {"scaleMax", 1}}
+	case Glitch:
+		return []UniformMapping{{"time", 1}, {"amount", 1}, {"blockSize", 1}}
+	case MatrixRain:
+		return []UniformMapping{{"time", 1}, {"density", 1}, {"speed", 1}, {"opacity", 1}}
 	}
 
 	return nil

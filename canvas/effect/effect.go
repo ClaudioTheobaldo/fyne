@@ -144,9 +144,29 @@ const (
 
 	// Advanced effects
 
-	ColorLUT   // 3D lookup table for cinematic color grading
+	ColorLUT    // 3D lookup table for cinematic color grading
 	ToneMapping // HDR to SDR conversion
-	FXAA       // Fast approximate anti-aliasing
+	FXAA        // Fast approximate anti-aliasing
+
+	// Compositing effects
+
+	ColorReplace // Chroma key — swap a color range for another (sourceColor, targetColor, tolerance)
+	Duotone      // Map luminance to two colors (darkColor, lightColor)
+	SplitTone    // Different tint for shadows vs highlights (shadowTint, highlightTint, balance)
+	ChannelMixer // Remap RGB channels (redOut, greenOut, blueOut as vec3)
+
+	// Additional procedural effects
+
+	GradientMap       // Map luminance to 5-stop color ramp (color0..color4)
+	PatternOverlay    // Checkerboard/stripes/dots overlay (patternSize, patternType, opacity)
+	NoiseDisplacement // Perlin noise UV offset (amount, scale, seed)
+
+	// Time-based animated effects
+
+	Shimmer    // Animated gloss highlight sweep (time, width, angle, intensity)
+	Pulse      // Rhythmic brightness+scale oscillation (time, speed, brightMin/Max, scaleMin/Max)
+	Glitch     // Block displacement + color shift (time, amount, blockSize)
+	MatrixRain // Procedural falling characters (time, density, speed, opacity)
 
 	effectTypeCount // sentinel for iteration
 )
