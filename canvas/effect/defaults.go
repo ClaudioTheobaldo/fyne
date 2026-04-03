@@ -75,6 +75,20 @@ func DefaultUniforms(kind EffectType) []UniformMapping {
 		return []UniformMapping{{"radius", 1}, {"focusY", 1}, {"focusWidth", 1}}
 	case Skew:
 		return []UniformMapping{{"skewX", 1}, {"skewY", 1}}
+	case Rotate:
+		return []UniformMapping{{"angle", 1}}
+	case Scale:
+		return []UniformMapping{{"scaleX", 1}, {"scaleY", 1}}
+	case PerspectiveTransform:
+		return []UniformMapping{{"amount", 1}, {"direction", 1}}
+	case Wave:
+		return []UniformMapping{{"amplitude", 1}, {"frequency", 1}, {"phase", 1}, {"direction", 1}}
+	case PageCurl:
+		return []UniformMapping{{"curl", 1}, {"radius", 1}}
+	case Mirror:
+		return []UniformMapping{{"flipX", 1}, {"flipY", 1}}
+	case Kaleidoscope:
+		return []UniformMapping{{"segments", 1}, {"rotation", 1}}
 
 	// Edge/Detail effects
 	case Sharpen:

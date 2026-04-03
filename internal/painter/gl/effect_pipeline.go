@@ -250,6 +250,8 @@ func (p *painter) compileEffectProgram(fragSrc string) *ProgramState {
 		"pixelSize", "offset", "strength", "center", "distortion",
 		"amplitude", "frequency", "speed", "noiseScale",
 		"focusY", "focusWidth", "skewX", "skewY",
+		"scaleX", "scaleY", "flipX", "flipY", "segments", "rotation",
+		"curl", "phase",
 		// Detail
 		"threshold",
 		// Shadow

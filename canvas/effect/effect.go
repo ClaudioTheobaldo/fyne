@@ -59,6 +59,13 @@ const (
 	Frosted            // Blur with noise-displaced sampling
 	TiltShift          // Position-dependent selective focus blur
 	Skew               // UV-based visual skew (skewX, skewY in tangent units)
+	Rotate             // UV rotation by angle (degrees) around center
+	Scale              // UV scale/zoom (scaleX, scaleY) centered
+	PerspectiveTransform // Perspective trapezoid (amount, direction: 0=bot 1=top 2=left 3=right)
+	Wave               // Sine-wave flag distortion (amplitude, frequency, phase, direction)
+	PageCurl           // Page curl/peel effect (curl progress, radius)
+	Mirror             // Horizontal and/or vertical flip (flipX, flipY: 0 or 1)
+	Kaleidoscope       // Rotational symmetry (segments, rotation degrees)
 
 	// Edge and detail effects
 

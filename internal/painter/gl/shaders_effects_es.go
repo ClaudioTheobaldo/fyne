@@ -104,6 +104,27 @@ var effectTiltShiftFrag []byte
 //go:embed shaders/effects/skew_es.frag
 var effectSkewFrag []byte
 
+//go:embed shaders/effects/rotate_es.frag
+var effectRotateFrag []byte
+
+//go:embed shaders/effects/scale_es.frag
+var effectScaleFrag []byte
+
+//go:embed shaders/effects/perspective_transform_es.frag
+var effectPerspectiveTransformFrag []byte
+
+//go:embed shaders/effects/wave_es.frag
+var effectWaveFrag []byte
+
+//go:embed shaders/effects/page_curl_es.frag
+var effectPageCurlFrag []byte
+
+//go:embed shaders/effects/mirror_es.frag
+var effectMirrorFrag []byte
+
+//go:embed shaders/effects/kaleidoscope_es.frag
+var effectKaleidoscopeFrag []byte
+
 // --- Detail effects ---
 
 //go:embed shaders/effects/sharpen_es.frag
@@ -272,6 +293,20 @@ func effectShaderSource(kind effect.EffectType) []byte {
 		return effectTiltShiftFrag
 	case effect.Skew:
 		return effectSkewFrag
+	case effect.Rotate:
+		return effectRotateFrag
+	case effect.Scale:
+		return effectScaleFrag
+	case effect.PerspectiveTransform:
+		return effectPerspectiveTransformFrag
+	case effect.Wave:
+		return effectWaveFrag
+	case effect.PageCurl:
+		return effectPageCurlFrag
+	case effect.Mirror:
+		return effectMirrorFrag
+	case effect.Kaleidoscope:
+		return effectKaleidoscopeFrag
 
 	// Detail
 	case effect.Sharpen:
