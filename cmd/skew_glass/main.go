@@ -151,15 +151,16 @@ type glassRenderer struct {
 
 func (r *glassRenderer) Layout(size fyne.Size) {
 	r.btn.bg.Resize(size)
-	r.btn.lbl.Resize(size)
-	h := r.btn.lbl.MinSize().Height
-	r.btn.lbl.Move(fyne.NewPos(0, (size.Height-h)/2))
+	// Center text: use TextSize as approximate rendered height
+	textH := r.btn.lbl.TextSize * 1.4 // rough line height
+	r.btn.lbl.Resize(fyne.NewSize(size.Width, textH))
+	r.btn.lbl.Move(fyne.NewPos(0, (size.Height-textH)/2))
 }
 
-func (r *glassRenderer) MinSize() fyne.Size        { return r.btn.MinSize() }
-func (r *glassRenderer) Refresh()                   {}
+func (r *glassRenderer) MinSize() fyne.Size          { return r.btn.MinSize() }
+func (r *glassRenderer) Refresh()                     {}
 func (r *glassRenderer) Objects() []fyne.CanvasObject { return []fyne.CanvasObject{r.btn.bg, r.btn.lbl} }
-func (r *glassRenderer) Destroy()                   {}
+func (r *glassRenderer) Destroy()                     {}
 
 func anim(eff *effect.Effect, param string, from, to float32, dur time.Duration) {
 	a := fyne.NewAnimation(dur, func(t float32) {

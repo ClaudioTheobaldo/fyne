@@ -122,9 +122,9 @@ type effectButtonRenderer struct {
 
 func (r *effectButtonRenderer) Layout(size fyne.Size) {
 	r.bg.Resize(size)
-	r.label.Resize(size)
-	labelH := r.label.MinSize().Height
-	r.label.Move(fyne.NewPos(0, (size.Height-labelH)/2))
+	textH := r.label.TextSize * 1.4
+	r.label.Resize(fyne.NewSize(size.Width, textH))
+	r.label.Move(fyne.NewPos(0, (size.Height-textH)/2))
 }
 
 func (r *effectButtonRenderer) MinSize() fyne.Size {
