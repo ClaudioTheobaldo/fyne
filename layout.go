@@ -1,10 +1,6 @@
 package fyne
 
 // Layout defines how [CanvasObject]s may be laid out in a specified Size.
-//
-// Deprecated: Implement [ConstrainedLayout] instead for correct intrinsic
-// sizing — particularly for layouts whose height depends on their width
-// (e.g. wrapping, auto-sizing). The old interface remains fully supported.
 type Layout interface {
 	// Layout will manipulate the listed [CanvasObject]s Size and Position
 	// to fit within the specified size.
