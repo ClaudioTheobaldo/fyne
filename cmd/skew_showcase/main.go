@@ -1,8 +1,9 @@
 package main
 
 import (
-	"fmt"
+	"image"
 	"image/color"
+	"math"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -12,175 +13,147 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func skewBtn(label string, bgColor, textColor color.Color, skewX, skewY float32) *fyne.Container {
-	rect := canvas.NewRectangle(bgColor)
-	rect.SetMinSize(fyne.NewSize(140, 50))
-	rect.CornerRadius = 8
-	rect.AddEffect(effect.Skew, skewX, skewY)
-
-	text := canvas.NewText(label, textColor)
-	text.TextSize = 13
-	text.TextStyle = fyne.TextStyle{Bold: true}
-	text.Alignment = fyne.TextAlignCenter
-
-	desc := widget.NewLabel(fmt.Sprintf("skewX=%.1f  skewY=%.1f", skewX, skewY))
-	desc.Alignment = fyne.TextAlignCenter
-
-	return container.NewVBox(
-		container.NewStack(rect, container.NewCenter(text)),
-		desc,
-	)
-}
-
 func main() {
 	a := app.New()
-	w := a.NewWindow("Skew Effect Showcase")
-	w.Resize(fyne.NewSize(900, 750))
+	w := a.NewWindow("Skew on Every Primitive")
+	w.Resize(fyne.NewSize(950, 700))
 
-	title := canvas.NewText("Skew Effect — UV Distortion Shader", color.White)
+	title := canvas.NewText("effect.Skew on Every Canvas Primitive", color.White)
 	title.TextSize = 20
 	title.TextStyle = fyne.TextStyle{Bold: true}
 
-	subtitle := canvas.NewText("Visual skew via fragment shader UV remapping (not geometry transform)", color.NRGBA{160, 160, 160, 255})
-	subtitle.TextSize = 12
+	skewX := float32(0.5)
+	skewY := float32(0.0)
 
-	blue := color.NRGBA{37, 99, 235, 255}
-	purple := color.NRGBA{124, 58, 237, 255}
-	red := color.NRGBA{220, 60, 60, 255}
-	green := color.NRGBA{40, 180, 80, 255}
-	orange := color.NRGBA{240, 140, 40, 255}
-	cyan := color.NRGBA{40, 200, 220, 255}
-	pink := color.NRGBA{240, 100, 180, 255}
-	dark := color.NRGBA{30, 30, 40, 255}
-	gold := color.NRGBA{255, 215, 0, 255}
-	white := color.White
+	// ===== 1. Rectangle =====
+	rect := canvas.NewRectangle(color.NRGBA{37, 99, 235, 255})
+	rect.SetMinSize(fyne.NewSize(150, 70))
+	rect.CornerRadius = 10
+	rect.AddEffect(effect.Skew, skewX, skewY)
 
-	// === Section 1: SkewX only ===
-	sec1 := canvas.NewText("Horizontal Skew (skewX)", color.NRGBA{100, 200, 255, 255})
-	sec1.TextSize = 15
-	sec1.TextStyle = fyne.TextStyle{Bold: true}
+	// ===== 2. Text =====
+	txt := canvas.NewText("Hello Fyne!", color.NRGBA{255, 215, 0, 255})
+	txt.TextSize = 28
+	txt.TextStyle = fyne.TextStyle{Bold: true}
+	txt.SetMinSize(fyne.NewSize(200, 40))
+	txt.AddEffect(effect.Skew, skewX, skewY)
 
-	skewXRow := container.NewGridWrap(fyne.NewSize(160, 100),
-		skewBtn("Skew X -1.0", blue, white, -1.0, 0),
-		skewBtn("Skew X -0.5", blue, white, -0.5, 0),
-		skewBtn("Skew X -0.2", blue, white, -0.2, 0),
-		skewBtn("No Skew", blue, white, 0, 0),
-		skewBtn("Skew X +0.2", blue, white, 0.2, 0),
-		skewBtn("Skew X +0.5", blue, white, 0.5, 0),
-		skewBtn("Skew X +1.0", blue, white, 1.0, 0),
+	// ===== 3. Circle =====
+	circle := canvas.NewCircle(color.NRGBA{220, 60, 60, 255})
+	circle.StrokeColor = color.NRGBA{255, 200, 200, 255}
+	circle.StrokeWidth = 3
+	circle.Resize(fyne.NewSize(100, 100))
+	circle.AddEffect(effect.Skew, skewX, skewY)
+
+	// ===== 4. Line =====
+	line := canvas.NewLine(color.NRGBA{0, 255, 200, 255})
+	line.StrokeWidth = 4
+	line.Resize(fyne.NewSize(150, 60))
+	line.AddEffect(effect.Skew, skewX, skewY)
+
+	// ===== 5. Arc (Pie) =====
+	arc := canvas.NewPieArc(0, 270, color.NRGBA{240, 140, 40, 255})
+	arc.StrokeColor = color.NRGBA{255, 200, 100, 255}
+	arc.StrokeWidth = 2
+	arc.Resize(fyne.NewSize(100, 100))
+	arc.SetMinSize(fyne.NewSize(100, 100))
+	arc.AddEffect(effect.Skew, skewX, skewY)
+
+	// ===== 6. Polygon (Hexagon) =====
+	poly := canvas.NewPolygon(6, color.NRGBA{124, 58, 237, 255})
+	poly.StrokeColor = color.NRGBA{200, 160, 255, 255}
+	poly.StrokeWidth = 2
+	poly.Resize(fyne.NewSize(100, 100))
+	poly.SetMinSize(fyne.NewSize(100, 100))
+	poly.AddEffect(effect.Skew, skewX, skewY)
+
+	// ===== 7. LinearGradient =====
+	linGrad := canvas.NewLinearGradient(
+		color.NRGBA{255, 0, 100, 255},
+		color.NRGBA{0, 100, 255, 255},
+		45,
+	)
+	linGrad.SetMinSize(fyne.NewSize(150, 70))
+	linGrad.AddEffect(effect.Skew, skewX, skewY)
+
+	// ===== 8. RadialGradient =====
+	radGrad := canvas.NewRadialGradient(
+		color.NRGBA{255, 255, 0, 255},
+		color.NRGBA{50, 0, 100, 255},
+	)
+	radGrad.SetMinSize(fyne.NewSize(100, 100))
+	radGrad.AddEffect(effect.Skew, skewX, skewY)
+
+	// ===== 9. Raster (procedural) =====
+	raster := canvas.NewRasterWithPixels(func(x, y, w, h int) color.Color {
+		fx := float64(x) / float64(w)
+		fy := float64(y) / float64(h)
+		r := uint8(128 + 127*math.Sin(fx*10))
+		g := uint8(128 + 127*math.Cos(fy*10))
+		b := uint8(128 + 127*math.Sin((fx+fy)*8))
+		return color.NRGBA{r, g, b, 255}
+	})
+	raster.SetMinSize(fyne.NewSize(120, 80))
+	raster.AddEffect(effect.Skew, skewX, skewY)
+
+	// ===== 10. Image (generated) =====
+	img := image.NewNRGBA(image.Rect(0, 0, 120, 80))
+	for y := 0; y < 80; y++ {
+		for x := 0; x < 120; x++ {
+			r := uint8((x * 255) / 120)
+			g := uint8((y * 255) / 80)
+			b := uint8(128)
+			img.SetNRGBA(x, y, color.NRGBA{r, g, b, 255})
+		}
+	}
+	fyneImg := canvas.NewImageFromImage(img)
+	fyneImg.SetMinSize(fyne.NewSize(120, 80))
+	fyneImg.FillMode = canvas.ImageFillStretch
+	fyneImg.AddEffect(effect.Skew, skewX, skewY)
+
+	// ===== 11. ShaderRect =====
+	shaderSrc := `#version 110
+uniform vec4 fill_color;
+void main() {
+    gl_FragColor = fill_color;
+}`
+	shaderRect := canvas.NewShaderRect(shaderSrc, color.NRGBA{0, 200, 150, 255})
+	shaderRect.SetMinSize(fyne.NewSize(150, 70))
+	shaderRect.CornerRadius = 8
+	shaderRect.AddEffect(effect.Skew, skewX, skewY)
+
+	// ===== LAYOUT =====
+	card := func(label string, obj fyne.CanvasObject) *fyne.Container {
+		lbl := widget.NewLabel(label)
+		lbl.Alignment = fyne.TextAlignCenter
+		lbl.TextStyle = fyne.TextStyle{Bold: true}
+		return container.NewVBox(container.NewCenter(obj), lbl)
+	}
+
+	grid := container.NewGridWrap(fyne.NewSize(180, 140),
+		card("Rectangle", rect),
+		card("Text", txt),
+		card("Circle", circle),
+		card("Line", line),
+		card("Arc (Pie)", arc),
+		card("Polygon (Hex)", poly),
+		card("LinearGradient", linGrad),
+		card("RadialGradient", radGrad),
+		card("Raster (Procedural)", raster),
+		card("Image", fyneImg),
+		card("ShaderRect", shaderRect),
 	)
 
-	// === Section 2: SkewY only ===
-	sec2 := canvas.NewText("Vertical Skew (skewY)", color.NRGBA{100, 200, 255, 255})
-	sec2.TextSize = 15
-	sec2.TextStyle = fyne.TextStyle{Bold: true}
-
-	skewYRow := container.NewGridWrap(fyne.NewSize(160, 100),
-		skewBtn("Skew Y -1.0", purple, white, 0, -1.0),
-		skewBtn("Skew Y -0.5", purple, white, 0, -0.5),
-		skewBtn("Skew Y -0.2", purple, white, 0, -0.2),
-		skewBtn("No Skew", purple, white, 0, 0),
-		skewBtn("Skew Y +0.2", purple, white, 0, 0.2),
-		skewBtn("Skew Y +0.5", purple, white, 0, 0.5),
-		skewBtn("Skew Y +1.0", purple, white, 0, 1.0),
-	)
-
-	// === Section 3: Combined X+Y ===
-	sec3 := canvas.NewText("Combined Skew (X + Y)", color.NRGBA{255, 200, 100, 255})
-	sec3.TextSize = 15
-	sec3.TextStyle = fyne.TextStyle{Bold: true}
-
-	combinedRow := container.NewGridWrap(fyne.NewSize(160, 100),
-		skewBtn("Italic", green, white, 0.3, 0),
-		skewBtn("Lean Back", red, white, -0.3, 0),
-		skewBtn("Shear ↗", orange, white, 0.4, 0.4),
-		skewBtn("Shear ↙", cyan, white, -0.4, -0.4),
-		skewBtn("Diamond", pink, white, 0.5, -0.5),
-		skewBtn("Rhombus", gold, dark, -0.5, 0.5),
-		skewBtn("Extreme", dark, gold, 0.8, 0.3),
-	)
-
-	// === Section 4: Skew + other effects stacked ===
-	sec4 := canvas.NewText("Skew + Stacked Effects", color.NRGBA{100, 255, 200, 255})
-	sec4.TextSize = 15
-	sec4.TextStyle = fyne.TextStyle{Bold: true}
-
-	// Skew + blur
-	skewBlur := canvas.NewRectangle(red)
-	skewBlur.SetMinSize(fyne.NewSize(140, 50))
-	skewBlur.CornerRadius = 8
-	skewBlur.AddEffect(effect.Skew, 0.4, 0)
-	skewBlur.AddEffect(effect.GaussianBlur, 2.0)
-	skewBlurText := canvas.NewText("Skew + Blur", white)
-	skewBlurText.TextSize = 13
-	skewBlurText.TextStyle = fyne.TextStyle{Bold: true}
-	skewBlurText.Alignment = fyne.TextAlignCenter
-
-	// Skew + sepia
-	skewSepia := canvas.NewRectangle(green)
-	skewSepia.SetMinSize(fyne.NewSize(140, 50))
-	skewSepia.CornerRadius = 8
-	skewSepia.AddEffect(effect.Skew, -0.3, 0)
-	skewSepia.AddEffect(effect.Sepia, 0.8)
-	skewSepiaText := canvas.NewText("Skew + Sepia", white)
-	skewSepiaText.TextSize = 13
-	skewSepiaText.TextStyle = fyne.TextStyle{Bold: true}
-	skewSepiaText.Alignment = fyne.TextAlignCenter
-
-	// Skew + vignette
-	skewVig := canvas.NewRectangle(orange)
-	skewVig.SetMinSize(fyne.NewSize(140, 50))
-	skewVig.CornerRadius = 8
-	skewVig.AddEffect(effect.Skew, 0.3, 0.1)
-	skewVig.AddEffect(effect.Vignette, 1.2, 0.4)
-	skewVigText := canvas.NewText("Skew + Vignette", white)
-	skewVigText.TextSize = 13
-	skewVigText.TextStyle = fyne.TextStyle{Bold: true}
-	skewVigText.Alignment = fyne.TextAlignCenter
-
-	// Skew + chromatic aberration
-	skewChroma := canvas.NewRectangle(dark)
-	skewChroma.SetMinSize(fyne.NewSize(140, 50))
-	skewChroma.CornerRadius = 8
-	skewChroma.AddEffect(effect.Skew, 0.2, -0.2)
-	skewChroma.AddEffect(effect.ChromaticAberration, 4.0)
-	skewChroma.AddEffect(effect.Brightness, 1.3)
-	skewChromaText := canvas.NewText("Skew + Glitch", color.NRGBA{0, 255, 200, 255})
-	skewChromaText.TextSize = 13
-	skewChromaText.TextStyle = fyne.TextStyle{Bold: true}
-	skewChromaText.Alignment = fyne.TextAlignCenter
-
-	// Skew + scanlines
-	skewScan := canvas.NewRectangle(color.NRGBA{10, 30, 10, 255})
-	skewScan.SetMinSize(fyne.NewSize(140, 50))
-	skewScan.CornerRadius = 4
-	skewScan.AddEffect(effect.Skew, -0.2, 0)
-	skewScan.AddEffect(effect.Scanlines, 1.0, 0.3)
-	skewScan.AddEffect(effect.Brightness, 1.3)
-	skewScanText := canvas.NewText("Skew + Scanlines", color.NRGBA{0, 255, 0, 255})
-	skewScanText.TextSize = 13
-	skewScanText.TextStyle = fyne.TextStyle{Bold: true}
-	skewScanText.Alignment = fyne.TextAlignCenter
-
-	stackedRow := container.NewGridWrap(fyne.NewSize(160, 100),
-		container.NewVBox(container.NewStack(skewBlur, container.NewCenter(skewBlurText)), widget.NewLabel("Skew 0.4 + Blur 2")),
-		container.NewVBox(container.NewStack(skewSepia, container.NewCenter(skewSepiaText)), widget.NewLabel("Skew -0.3 + Sepia")),
-		container.NewVBox(container.NewStack(skewVig, container.NewCenter(skewVigText)), widget.NewLabel("Skew 0.3,0.1 + Vig")),
-		container.NewVBox(container.NewStack(skewChroma, container.NewCenter(skewChromaText)), widget.NewLabel("Skew + Chroma + Bright")),
-		container.NewVBox(container.NewStack(skewScan, container.NewCenter(skewScanText)), widget.NewLabel("Skew + Scanlines")),
-	)
+	note := canvas.NewText("All primitives: AddEffect(effect.Skew, 0.5, 0.0) — same API, same pipeline", color.NRGBA{140, 255, 140, 255})
+	note.TextSize = 12
+	note.TextStyle = fyne.TextStyle{Monospace: true}
 
 	content := container.NewVBox(
 		container.NewCenter(title),
-		container.NewCenter(subtitle),
 		widget.NewSeparator(),
-		sec1, skewXRow,
+		grid,
 		widget.NewSeparator(),
-		sec2, skewYRow,
-		widget.NewSeparator(),
-		sec3, combinedRow,
-		widget.NewSeparator(),
-		sec4, stackedRow,
+		container.NewCenter(note),
 	)
 
 	w.SetContent(container.NewScroll(content))
