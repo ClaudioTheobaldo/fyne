@@ -204,7 +204,6 @@ type StreamingImage struct {
 
 	mu           sync.Mutex
 	pendingFrame *image.RGBA
-	pendingYUV   *YUV420PFrame
 	pendingRaw   *RawFrame
 	texWidth     int
 	texHeight    int
@@ -293,28 +292,16 @@ func (s *StreamingImage) SetTextureSize(w, h int) {
 	s.mu.Unlock()
 }
 
-// UpdateYUVFrame provides new YUV420P planar data to be displayed. The frame
-// will be uploaded to the GPU as three single-channel textures on the next
-// paint cycle and converted to RGB by a fragment shader.
-// This method is safe to call from any goroutine.
+// UpdateYUVFrame provides new YUV420P planar data to be displayed.
+// This is a convenience wrapper around UpdateRawFrame for the common case
+// of YUV420P input; it is safe to call from any goroutine.
 func (s *StreamingImage) UpdateYUVFrame(frame *YUV420PFrame) {
-	s.mu.Lock()
-	s.pendingYUV = frame
-	s.mu.Unlock()
-
-	repaint(s)
-}
-
-// ConsumePendingYUVFrame returns the most recently provided YUV frame and
-// clears the pending state. Returns nil if no new frame is available.
-// Called by the painter on the GL thread.
-func (s *StreamingImage) ConsumePendingYUVFrame() *YUV420PFrame {
-	s.mu.Lock()
-	frame := s.pendingYUV
-	s.pendingYUV = nil
-	s.mu.Unlock()
-
-	return frame
+	s.UpdateRawFrame(&RawFrame{
+		Data:    [4][]byte{frame.Y, frame.U, frame.V},
+		Strides: [4]int{frame.StrideY, frame.StrideU, frame.StrideV},
+		Width:   frame.Width,
+		Height:  frame.Height,
+	})
 }
 
 // UpdateRawFrame provides new frame data in the format specified by PixelFormat.

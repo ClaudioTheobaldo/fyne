@@ -62,62 +62,6 @@ func (p *painter) uploadStreamingRawFrame(img *canvas.StreamingImage, frame *can
 	return textures
 }
 
-// uploadStreamingYUVFrame uploads Y, U, V planes via direct TexImage2D/TexSubImage2D (no PBO).
-// This is the non-desktop path for mobile and WASM where PBOs are not available.
-func (p *painter) uploadStreamingYUVFrame(img *canvas.StreamingImage, frame *canvas.YUV420PFrame) (Texture, Texture, Texture) {
-	w := frame.Width
-	h := frame.Height
-	uvW := w / 2
-	uvH := h / 2
-
-	if p.yuvPBOStates == nil {
-		p.yuvPBOStates = make(map[*canvas.StreamingImage]*yuvPBOState)
-	}
-
-	state := p.yuvPBOStates[img]
-	firstFrame := state == nil || state.width != w || state.height != h
-	if state == nil {
-		state = &yuvPBOState{width: w, height: h}
-		state.texY = p.newTexture(img.ScaleMode)
-		state.texU = p.newTexture(img.ScaleMode)
-		state.texV = p.newTexture(img.ScaleMode)
-		p.yuvPBOStates[img] = state
-	}
-
-	p.ctx.ActiveTexture(texture0)
-	p.ctx.BindTexture(texture2D, state.texY)
-	if firstFrame {
-		p.ctx.TexImage2D(texture2D, 0, w, h, colorFormatLuminance, unsignedByte, frame.Y)
-	} else {
-		p.ctx.TexSubImage2D(texture2D, 0, 0, 0, w, h, colorFormatLuminance, unsignedByte, frame.Y)
-	}
-	p.logError()
-
-	p.ctx.ActiveTexture(texture1)
-	p.ctx.BindTexture(texture2D, state.texU)
-	if firstFrame {
-		p.ctx.TexImage2D(texture2D, 0, uvW, uvH, colorFormatLuminance, unsignedByte, frame.U)
-	} else {
-		p.ctx.TexSubImage2D(texture2D, 0, 0, 0, uvW, uvH, colorFormatLuminance, unsignedByte, frame.U)
-	}
-	p.logError()
-
-	p.ctx.ActiveTexture(texture2)
-	p.ctx.BindTexture(texture2D, state.texV)
-	if firstFrame {
-		p.ctx.TexImage2D(texture2D, 0, uvW, uvH, colorFormatLuminance, unsignedByte, frame.V)
-	} else {
-		p.ctx.TexSubImage2D(texture2D, 0, 0, 0, uvW, uvH, colorFormatLuminance, unsignedByte, frame.V)
-	}
-	p.logError()
-
-	state.width = w
-	state.height = h
-	state.ready = true
-	img.SetTextureSize(w, h)
-	return state.texY, state.texU, state.texV
-}
-
 // uploadStreamingFrame uploads frame pixels directly via TexSubImage2D (no PBO).
 // This is the fallback for platforms where PBOs are not available (WASM, mobile, GLES2).
 func (p *painter) uploadStreamingFrame(img *canvas.StreamingImage, frame *image.RGBA) Texture {

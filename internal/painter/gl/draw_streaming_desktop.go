@@ -162,30 +162,6 @@ func (p *painter) uploadSinglePlane(
 	return tex
 }
 
-// uploadStreamingYUVFrame uploads Y, U, V planes via PBO double-buffering.
-func (p *painter) uploadStreamingYUVFrame(img *canvas.StreamingImage, frame *canvas.YUV420PFrame) (Texture, Texture, Texture) {
-	w := frame.Width
-	h := frame.Height
-	uvW := w / 2
-	uvH := h / 2
-
-	state := p.getOrCreateYUVPBO(img, w, h)
-	writeIdx := state.index
-	readIdx := 1 - writeIdx
-
-	state.texY = p.uploadSinglePlane(state.yPBO, state.texY, writeIdx, readIdx,
-		w, h, frame.StrideY, frame.Y, state.ready, img.ScaleMode)
-	state.texU = p.uploadSinglePlane(state.uPBO, state.texU, writeIdx, readIdx,
-		uvW, uvH, frame.StrideU, frame.U, state.ready, img.ScaleMode)
-	state.texV = p.uploadSinglePlane(state.vPBO, state.texV, writeIdx, readIdx,
-		uvW, uvH, frame.StrideV, frame.V, state.ready, img.ScaleMode)
-
-	state.ready = true
-	state.index = 1 - state.index
-
-	img.SetTextureSize(w, h)
-	return state.texY, state.texU, state.texV
-}
 
 // uploadStreamingFrameDirect uploads frame pixels via TexSubImage2D without PBOs.
 // Used when PBOs are disabled or as a fallback.

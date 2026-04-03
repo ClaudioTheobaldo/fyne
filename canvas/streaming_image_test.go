@@ -113,29 +113,35 @@ func TestStreamingImage_UpdateFrame_StoredAndConsumed(t *testing.T) {
 
 // ── UpdateYUVFrame (YUV420P legacy path) ─────────────────────────────────────
 
-func TestStreamingImage_UpdateYUVFrame_StoredAndConsumed(t *testing.T) {
+func TestStreamingImage_UpdateYUVFrame_DelegatestoRawFrame(t *testing.T) {
 	img := canvas.NewStreamingImageYUV420P()
 
-	if got := img.ConsumePendingYUVFrame(); got != nil {
-		t.Error("ConsumePendingYUVFrame: expected nil before UpdateYUVFrame")
+	// Before update: nothing pending.
+	if got := img.ConsumePendingRawFrame(); got != nil {
+		t.Error("ConsumePendingRawFrame: expected nil before UpdateYUVFrame")
 	}
 
 	yuv := &canvas.YUV420PFrame{
 		Y: make([]byte, 64*64), U: make([]byte, 32*32), V: make([]byte, 32*32),
+		StrideY: 64, StrideU: 32, StrideV: 32,
 		Width: 64, Height: 64,
 	}
 	img.UpdateYUVFrame(yuv)
 
-	got := img.ConsumePendingYUVFrame()
+	// UpdateYUVFrame now delegates to UpdateRawFrame internally.
+	got := img.ConsumePendingRawFrame()
 	if got == nil {
-		t.Fatal("ConsumePendingYUVFrame: expected non-nil after UpdateYUVFrame")
+		t.Fatal("ConsumePendingRawFrame: expected non-nil after UpdateYUVFrame")
 	}
-	if got != yuv {
-		t.Error("ConsumePendingYUVFrame: returned different pointer than supplied frame")
+	if got.Width != 64 || got.Height != 64 {
+		t.Errorf("RawFrame dimensions: got %dx%d, want 64x64", got.Width, got.Height)
+	}
+	if &got.Data[0][0] != &yuv.Y[0] {
+		t.Error("RawFrame.Data[0] should share backing array with YUV420PFrame.Y")
 	}
 
-	if got2 := img.ConsumePendingYUVFrame(); got2 != nil {
-		t.Error("ConsumePendingYUVFrame: expected nil on second call")
+	if got2 := img.ConsumePendingRawFrame(); got2 != nil {
+		t.Error("ConsumePendingRawFrame: expected nil on second call")
 	}
 }
 

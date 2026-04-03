@@ -155,19 +155,6 @@ func (p *painter) Init() {
 	)
 	p.enableAttribArrays(p.arcProgram, "vert", "normal")
 
-	p.yuvProgram = ProgramState{
-		ref:        p.createProgram("yuv420p"),
-		buff:       p.createBuffer(20),
-		uniforms:   make(map[string]*UniformState),
-		attributes: make(map[string]Attribute),
-	}
-	p.getUniformLocations(p.yuvProgram, "texY", "texU", "texV", "alpha", "cornerRadius", "size", "inset")
-	p.enableAttribArrays(p.yuvProgram, "vert", "vertTexCoord")
-	p.ctx.UseProgram(p.yuvProgram.ref)
-	p.ctx.Uniform1i(p.yuvProgram.uniforms["texY"].ref, 0)
-	p.ctx.Uniform1i(p.yuvProgram.uniforms["texU"].ref, 1)
-	p.ctx.Uniform1i(p.yuvProgram.uniforms["texV"].ref, 2)
-
 	// ── yuv_planar: generic 3-plane 8-bit YUV with uniform color matrix ──────
 	p.yuvPlanarProgram = ProgramState{
 		ref:        p.createProgram("yuv_planar"),
