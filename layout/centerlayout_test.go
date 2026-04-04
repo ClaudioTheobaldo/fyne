@@ -60,3 +60,38 @@ func TestContainerCenterLayoutMinSize(t *testing.T) {
 
 	assert.Equal(t, minSize, layoutMin)
 }
+
+func TestCenterLayout_AlignStart(t *testing.T) {
+	obj := canvas.NewRectangle(color.NRGBA{0, 0, 0, 0})
+	obj.SetMinSize(fyne.NewSize(30, 20))
+
+	wrapped := layout.WithAlign(obj, layout.AlignStart)
+	layout.NewCenterLayout().Layout([]fyne.CanvasObject{wrapped}, fyne.NewSize(100, 100))
+
+	assert.Equal(t, float32(0), wrapped.Position().X, "AlignStart should be left-aligned")
+	assert.InDelta(t, float32(40), wrapped.Position().Y, 0.5, "vertically centered")
+}
+
+func TestCenterLayout_AlignEnd(t *testing.T) {
+	obj := canvas.NewRectangle(color.NRGBA{0, 0, 0, 0})
+	obj.SetMinSize(fyne.NewSize(30, 20))
+
+	wrapped := layout.WithAlign(obj, layout.AlignEnd)
+	layout.NewCenterLayout().Layout([]fyne.CanvasObject{wrapped}, fyne.NewSize(100, 100))
+
+	assert.InDelta(t, float32(70), wrapped.Position().X, 0.5, "AlignEnd should be right-aligned")
+	assert.InDelta(t, float32(40), wrapped.Position().Y, 0.5, "vertically centered")
+}
+
+func TestCenterLayout_AlignStretch(t *testing.T) {
+	obj := canvas.NewRectangle(color.NRGBA{0, 0, 0, 0})
+	obj.SetMinSize(fyne.NewSize(30, 20))
+
+	layout.NewCenterLayout().Layout([]fyne.CanvasObject{
+		layout.WithAlign(obj, layout.AlignStretch),
+	}, fyne.NewSize(100, 100))
+
+	assert.Equal(t, float32(0), obj.Position().X)
+	assert.Equal(t, float32(100), obj.Size().Width, "stretched to container width")
+	assert.Equal(t, float32(100), obj.Size().Height, "stretched to container height")
+}

@@ -93,6 +93,31 @@ func (c *Container) MinSize() Size {
 	return minSize
 }
 
+// constrainedMinSize returns the intrinsic minimum size for a constrained
+// layout given a known available width.  For layouts that implement
+// [ConstrainedLayout] this performs a constrained layout pass to discover
+// the true height.  For plain [Layout] implementations it falls back to the
+// static MinSize.
+func (c *Container) constrainedMinSize(availW float32) Size {
+	if cl, ok := c.Layout.(ConstrainedLayout); ok {
+		min := c.Layout.MinSize(c.Objects)
+		maxH := NewInfSize().Height
+		return cl.LayoutConstrained(c.Objects, Constraints{
+			MinSize: min,
+			MaxSize: NewSize(availW, maxH),
+		})
+	}
+	return c.MinSize()
+}
+
+// IntrinsicSize implements [IntrinsicSizer].  It returns the size this
+// container would naturally occupy given the supplied available width —
+// useful for parent layouts (e.g. VBox) to correctly allocate height for
+// wrap children without over-allocating.
+func (c *Container) IntrinsicSize(availW float32) Size {
+	return c.constrainedMinSize(availW)
+}
+
 // Move the container (and all its children) to a new position, relative to its parent.
 func (c *Container) Move(pos Position) {
 	c.position = pos
@@ -181,7 +206,9 @@ func (c *Container) layout() {
 	if c.Layout == nil {
 		return
 	}
-
+	// Always use the plain Layout() for the actual layout pass.
+	// ConstrainedLayout.LayoutConstrained is only used for measurement
+	// (via IntrinsicSizer) so parent layouts can correctly pre-allocate space.
 	c.Layout.Layout(c.Objects, c.size)
 }
 
