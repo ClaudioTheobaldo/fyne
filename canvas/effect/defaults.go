@@ -143,9 +143,28 @@ func DefaultUniforms(kind EffectType) []UniformMapping {
 
 	// Gradient overlay effects
 	case LinearGradientOverlay:
-		return []UniformMapping{{"startColor", 4}, {"endColor", 4}, {"angle", 1}}
+		// Multi-stop: up to 5 color stops. stopCount=0 means use startColor/endColor (2-stop legacy).
+		return []UniformMapping{
+			{"startColor", 4}, {"endColor", 4}, {"angle", 1},
+			{"stopCount", 1},
+			{"stop0Color", 4}, {"stop0Pos", 1},
+			{"stop1Color", 4}, {"stop1Pos", 1},
+			{"stop2Color", 4}, {"stop2Pos", 1},
+			{"stop3Color", 4}, {"stop3Pos", 1},
+			{"stop4Color", 4}, {"stop4Pos", 1},
+		}
 	case RadialGradientOverlay:
-		return []UniformMapping{{"startColor", 4}, {"endColor", 4}, {"center", 2}}
+		// radius = (radiusX, radiusY) in normalized coords; (1,1)=circular, (1.2,0.8)=elliptical.
+		// Multi-stop: up to 5 color stops. stopCount=0 means use startColor/endColor (2-stop legacy).
+		return []UniformMapping{
+			{"startColor", 4}, {"endColor", 4}, {"center", 2}, {"radius", 2},
+			{"stopCount", 1},
+			{"stop0Color", 4}, {"stop0Pos", 1},
+			{"stop1Color", 4}, {"stop1Pos", 1},
+			{"stop2Color", 4}, {"stop2Pos", 1},
+			{"stop3Color", 4}, {"stop3Pos", 1},
+			{"stop4Color", 4}, {"stop4Pos", 1},
+		}
 	case ConicGradientOverlay:
 		return []UniformMapping{{"startColor", 4}, {"endColor", 4}, {"center", 2}, {"angle", 1}}
 

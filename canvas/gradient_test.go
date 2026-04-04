@@ -298,6 +298,87 @@ func TestNewRadialGradient(t *testing.T) {
 	assert.Equal(t, color.NRGBA{0, 0, 0, 0x83}, imgCircleOffset.At(1, 5))
 }
 
+func TestRadialGradient_Elliptical(t *testing.T) {
+	// Elliptical with ScaleX=2.0 should stretch horizontally
+	g := canvas.NewRadialGradient(color.Black, color.Transparent)
+	g.ScaleX = 2.0
+	g.ScaleY = 1.0
+	img := g.Generate(10, 10)
+
+	// Center pixel should be opaque
+	centerColor := img.At(5, 5).(color.NRGBA)
+	assert.Greater(t, centerColor.A, uint8(0x80), "center should be dark")
+
+	// Compare horizontal vs vertical falloff: horizontal should be slower due to ScaleX=2
+	rightColor := img.At(8, 5).(color.NRGBA)
+	bottomColor := img.At(5, 8).(color.NRGBA)
+	// With ScaleX=2.0, the gradient extends further horizontally,
+	// so at the same pixel distance, horizontal should have higher alpha (darker)
+	assert.Greater(t, rightColor.A, bottomColor.A,
+		"horizontal falloff should be slower than vertical with ScaleX=2")
+}
+
+func TestRadialGradient_DefaultScaleBackwardCompat(t *testing.T) {
+	// ScaleX=0, ScaleY=0 should behave identically to the old circular gradient
+	g := canvas.NewRadialGradient(color.Black, color.Transparent)
+	imgDefault := g.Generate(10, 10)
+
+	g2 := canvas.NewRadialGradient(color.Black, color.Transparent)
+	g2.ScaleX = 1.0
+	g2.ScaleY = 1.0
+	imgExplicit := g2.Generate(10, 10)
+
+	for y := 0; y < 10; y++ {
+		for x := 0; x < 10; x++ {
+			assert.Equal(t, imgDefault.At(x, y), imgExplicit.At(x, y),
+				"default scale should match explicit 1.0 at %d,%d", x, y)
+		}
+	}
+}
+
+func TestLinearGradient_MultiStop(t *testing.T) {
+	g := &canvas.LinearGradient{
+		Angle: 0, // vertical
+		Stops: []canvas.GradientStop{
+			{Color: color.NRGBA{R: 255, A: 255}, Position: 0.0},  // red at top
+			{Color: color.NRGBA{G: 255, A: 255}, Position: 0.5},  // green at middle
+			{Color: color.NRGBA{B: 255, A: 255}, Position: 1.0},  // blue at bottom
+		},
+	}
+	img := g.Generate(1, 100)
+
+	// Top should be red
+	topColor := img.At(0, 0).(color.NRGBA)
+	assert.Greater(t, topColor.R, uint8(250), "top red channel should be near 255")
+	assert.Less(t, topColor.G, uint8(5), "top green channel should be near 0")
+
+	// Middle should be green
+	midColor := img.At(0, 50).(color.NRGBA)
+	assert.Greater(t, midColor.G, uint8(200), "middle should be mostly green")
+
+	// Bottom should be blue
+	bottomColor := img.At(0, 99).(color.NRGBA)
+	assert.Greater(t, bottomColor.B, uint8(200), "bottom should be mostly blue")
+}
+
+func TestRadialGradient_MultiStop(t *testing.T) {
+	g := canvas.NewRadialGradient(color.Transparent, color.Transparent)
+	g.Stops = []canvas.GradientStop{
+		{Color: color.NRGBA{R: 255, A: 255}, Position: 0.0},
+		{Color: color.Transparent, Position: 0.5},
+	}
+	img := g.Generate(10, 10)
+
+	// Center should be red
+	centerColor := img.At(5, 5).(color.NRGBA)
+	assert.Greater(t, centerColor.R, uint8(100), "center should be reddish")
+	assert.Greater(t, centerColor.A, uint8(100), "center should be opaque-ish")
+
+	// Edge should be transparent (past the 0.5 stop)
+	edgeColor := img.At(0, 0).(color.NRGBA)
+	assert.Less(t, edgeColor.A, uint8(50), "edge should be mostly transparent")
+}
+
 func TestGradient_colorComputation(t *testing.T) {
 	bg := internalTest.NewCheckedImage(50, 50, 1, 2)
 	bounds := image.Rect(0, 0, 49, 49)

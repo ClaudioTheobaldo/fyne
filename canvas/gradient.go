@@ -8,6 +8,15 @@ import (
 	"fyne.io/fyne/v2"
 )
 
+// GradientStop defines a color at a specific position along a gradient.
+// Position ranges from 0.0 (start) to 1.0 (end).
+//
+// Since: 2.8
+type GradientStop struct {
+	Color    color.Color
+	Position float64 // 0.0 to 1.0
+}
+
 // LinearGradient defines a Gradient travelling straight at a given angle.
 // The only supported values for the angle are `0.0` (vertical) and `90.0` (horizontal), currently.
 type LinearGradient struct {
@@ -16,6 +25,12 @@ type LinearGradient struct {
 	StartColor color.Color // The beginning color of the gradient
 	EndColor   color.Color // The end color of the gradient
 	Angle      float64     // The angle of the gradient (0/180 for vertical; 90/270 for horizontal)
+
+	// Stops defines a multi-stop color ramp. When non-empty, this takes precedence
+	// over StartColor/EndColor. Stops should be sorted by Position.
+	//
+	// Since: 2.8
+	Stops []GradientStop
 }
 
 // Generate calculates an image of the gradient with the specified width and height.
@@ -55,6 +70,9 @@ func (g *LinearGradient) Generate(iw, ih int) image.Image {
 		generator = func(_, y float64) float64 {
 			return y / h
 		}
+	}
+	if len(g.Stops) > 0 {
+		return computeGradientMultiStop(generator, iw, ih, g.Stops)
 	}
 	return computeGradient(generator, iw, ih, g.StartColor, g.EndColor)
 }
@@ -103,6 +121,19 @@ type RadialGradient struct {
 	// This is not a DP measure but relates to the width/height.
 	// A value of 0.5 would move the center by the half width/height.
 	CenterOffsetX, CenterOffsetY float64
+
+	// ScaleX and ScaleY control the elliptical shape of the gradient.
+	// Values default to 0 which is treated as 1.0 (circular).
+	// ScaleX=1.2, ScaleY=0.8 produces a horizontally-stretched ellipse.
+	//
+	// Since: 2.8
+	ScaleX, ScaleY float64
+
+	// Stops defines a multi-stop color ramp. When non-empty, this takes precedence
+	// over StartColor/EndColor. Stops should be sorted by Position.
+	//
+	// Since: 2.8
+	Stops []GradientStop
 }
 
 // Generate calculates an image of the gradient with the specified width and height.
@@ -111,6 +142,15 @@ func (g *RadialGradient) Generate(iw, ih int) image.Image {
 	// define center plus offset
 	centerX := w/2 + w*g.CenterOffsetX
 	centerY := h/2 + h*g.CenterOffsetY
+
+	// Apply elliptical scaling (0 treated as 1.0 for backward compat)
+	sx, sy := g.ScaleX, g.ScaleY
+	if sx == 0 {
+		sx = 1
+	}
+	if sy == 0 {
+		sy = 1
+	}
 
 	// handle negative offsets
 	var a, b float64
@@ -125,14 +165,22 @@ func (g *RadialGradient) Generate(iw, ih int) image.Image {
 		b = centerY
 	}
 
+	// Scale the radii by elliptical factors
+	a *= sx
+	b *= sy
+
 	generator := func(x, y float64) float64 {
-		// calculate distance from center for gradient multiplier
-		dx, dy := centerX-x, centerY-y
-		da := math.Sqrt(dx*dx + dy*dy*a*a/b/b)
+		// calculate elliptical distance from center
+		dx, dy := (centerX-x)/sx, (centerY-y)/sy
+		da := math.Sqrt(dx*dx + dy*dy*a*a/b/b/sx/sx)
 		if da > a {
 			return 1
 		}
 		return da / a
+	}
+
+	if len(g.Stops) > 0 {
+		return computeGradientMultiStop(generator, iw, ih, g.Stops)
 	}
 	return computeGradient(generator, iw, ih, g.StartColor, g.EndColor)
 }
@@ -207,6 +255,82 @@ func computeGradient(generator func(x, y float64) float64, w, h int, startColor,
 		}
 	}
 	return img
+}
+
+// computeGradientMultiStop renders a gradient image using N color stops.
+// The generator function returns a position in [0,1] for each pixel.
+func computeGradientMultiStop(generator func(x, y float64) float64, w, h int, stops []GradientStop) image.Image {
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	if len(stops) == 0 {
+		return img
+	}
+	if len(stops) == 1 {
+		c := stops[0].Color
+		if c == nil {
+			c = color.Transparent
+		}
+		for x := 0; x < w; x++ {
+			for y := 0; y < h; y++ {
+				img.Set(x, y, c)
+			}
+		}
+		return img
+	}
+
+	for x := 0; x < w; x++ {
+		for y := 0; y < h; y++ {
+			t := generator(float64(x)+0.5, float64(y)+0.5)
+			img.Set(x, y, interpolateStops(stops, t))
+		}
+	}
+	return img
+}
+
+// interpolateStops finds the two bracketing stops and lerps between them.
+func interpolateStops(stops []GradientStop, t float64) color.Color {
+	if t <= stops[0].Position {
+		c := stops[0].Color
+		if c == nil {
+			return color.Transparent
+		}
+		return c
+	}
+	last := stops[len(stops)-1]
+	if t >= last.Position {
+		c := last.Color
+		if c == nil {
+			return color.Transparent
+		}
+		return c
+	}
+	// find bracketing pair
+	for i := 1; i < len(stops); i++ {
+		if t <= stops[i].Position {
+			s0, s1 := stops[i-1], stops[i]
+			span := s1.Position - s0.Position
+			if span <= 0 {
+				c := s1.Color
+				if c == nil {
+					return color.Transparent
+				}
+				return c
+			}
+			d := (t - s0.Position) / span
+			c0, c1 := s0.Color, s1.Color
+			if c0 == nil {
+				c0 = color.Transparent
+			}
+			if c1 == nil {
+				c1 = color.Transparent
+			}
+			return calculatePixel(d, c0, c1)
+		}
+	}
+	c := last.Color
+	if c == nil {
+		return color.Transparent
+	}
+	return c
 }
 
 // NewHorizontalGradient creates a new horizontally travelling linear gradient.
