@@ -17,6 +17,8 @@ type baseObject struct {
 	Hidden   bool          // Is this object currently hidden
 
 	min fyne.Size // The minimum size this object can be
+
+	effectList // Composable shader effects support
 }
 
 // Hide will set this object to not be visible.

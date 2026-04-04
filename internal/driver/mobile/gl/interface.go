@@ -252,6 +252,46 @@ type Context interface {
 	//
 	// http://www.khronos.org/opengles/sdk/docs/man3/html/glViewport.xhtml
 	Viewport(x, y, width, height int)
+
+	// CreateFramebuffer creates a framebuffer object.
+	//
+	// http://www.khronos.org/opengles/sdk/docs/man3/html/glGenFramebuffers.xhtml
+	CreateFramebuffer() Framebuffer
+
+	// DeleteFramebuffer deletes the given framebuffer object.
+	//
+	// http://www.khronos.org/opengles/sdk/docs/man3/html/glDeleteFramebuffers.xhtml
+	DeleteFramebuffer(v Framebuffer)
+
+	// BindFramebuffer binds a framebuffer.
+	//
+	// http://www.khronos.org/opengles/sdk/docs/man3/html/glBindFramebuffer.xhtml
+	BindFramebuffer(target Enum, fb Framebuffer)
+
+	// FramebufferTexture2D attaches a texture to a framebuffer.
+	//
+	// http://www.khronos.org/opengles/sdk/docs/man3/html/glFramebufferTexture2D.xhtml
+	FramebufferTexture2D(target, attachment, textarget Enum, t Texture, level int)
+
+	// CheckFramebufferStatus checks the completeness of a framebuffer.
+	//
+	// http://www.khronos.org/opengles/sdk/docs/man3/html/glCheckFramebufferStatus.xhtml
+	CheckFramebufferStatus(target Enum) Enum
+
+	// Uniform3f writes a vec3 uniform variable.
+	//
+	// http://www.khronos.org/opengles/sdk/docs/man3/html/glUniform.xhtml
+	Uniform3f(dst Uniform, v0, v1, v2 float32)
+
+	// UniformMatrix3fv writes a 3x3 matrix uniform variable.
+	//
+	// http://www.khronos.org/opengles/sdk/docs/man3/html/glUniform.xhtml
+	UniformMatrix3fv(dst Uniform, src []float32)
+
+	// UniformMatrix4fv writes a 4x4 matrix uniform variable.
+	//
+	// http://www.khronos.org/opengles/sdk/docs/man3/html/glUniform.xhtml
+	UniformMatrix4fv(dst Uniform, src []float32)
 }
 
 // Worker is used by display driver code to execute OpenGL calls.

@@ -124,6 +124,10 @@ func (p *painter) drawLine(line *canvas.Line, pos fyne.Position, frame fyne.Size
 }
 
 func (p *painter) drawObject(o fyne.CanvasObject, pos fyne.Position, frame fyne.Size) {
+	if holder, ok := o.(effectHolder); ok && holder.HasEffects() {
+		p.drawObjectWithEffects(o, pos, frame)
+		return
+	}
 	switch obj := o.(type) {
 	case *canvas.StreamingImage:
 		p.drawStreamingImage(obj, pos, frame)
@@ -147,6 +151,8 @@ func (p *painter) drawObject(o fyne.CanvasObject, pos fyne.Position, frame fyne.
 		p.drawPolygon(obj, pos, frame)
 	case *canvas.Arc:
 		p.drawArc(obj, pos, frame)
+	case *canvas.ShaderRect:
+		p.drawShaderRect(obj, pos, frame)
 	}
 }
 
@@ -238,6 +244,98 @@ func (p *painter) drawOblong(obj fyne.CanvasObject, fill, stroke color.Color, st
 	p.SetUniform4f(program, "stroke_color", r, g, b, a)
 	p.logError()
 	// Fragment: END
+
+	p.ctx.DrawArrays(triangleStrip, 0, 4)
+	p.logError()
+}
+
+func (p *painter) drawShaderRect(rect *canvas.ShaderRect, pos fyne.Position, frame fyne.Size) {
+	if rect.FragmentShader == "" {
+		return
+	}
+	fill := rect.FillColor
+	stroke := rect.StrokeColor
+	if (fill == color.Transparent || fill == nil) && (stroke == color.Transparent || stroke == nil || rect.StrokeWidth == 0) {
+		return
+	}
+
+	// Select shader source based on platform
+	fragSrc := rect.FragmentShader
+	if isGLES() && rect.FragmentShaderES != "" {
+		fragSrc = rect.FragmentShaderES
+	}
+
+	ps := p.getOrCompileShaderProgram(fragSrc)
+	if ps == nil {
+		return // compilation failed
+	}
+
+	// Discover custom uniforms on first use
+	if len(rect.Uniforms) > 0 {
+		p.discoverCustomUniforms(ps, ps.ref, rect.Uniforms)
+	}
+
+	// Vertex setup (same as drawOblong)
+	bounds, points := p.vecRectCoords(pos, rect, frame, 0)
+	p.ctx.UseProgram(ps.ref)
+	p.updateBuffer(ps.buff, points)
+	p.UpdateVertexArray(*ps, "vert", 2, 4, 0)
+	p.UpdateVertexArray(*ps, "normal", 2, 4, 2)
+
+	p.ctx.BlendFunc(srcAlpha, oneMinusSrcAlpha)
+	p.logError()
+
+	// Standard uniforms
+	frameWidthScaled, frameHeightScaled := p.scaleFrameSize(frame)
+	p.SetUniform2f(*ps, "frame_size", frameWidthScaled, frameHeightScaled)
+
+	x1Scaled, x2Scaled, y1Scaled, y2Scaled := p.scaleRectCoords(bounds[0], bounds[2], bounds[1], bounds[3])
+	p.SetUniform4f(*ps, "rect_coords", x1Scaled, x2Scaled, y1Scaled, y2Scaled)
+
+	topRightRadius := paint.GetCornerRadius(rect.TopRightCornerRadius, rect.CornerRadius)
+	topLeftRadius := paint.GetCornerRadius(rect.TopLeftCornerRadius, rect.CornerRadius)
+	bottomRightRadius := paint.GetCornerRadius(rect.BottomRightCornerRadius, rect.CornerRadius)
+	bottomLeftRadius := paint.GetCornerRadius(rect.BottomLeftCornerRadius, rect.CornerRadius)
+
+	strokeWidthScaled := roundToPixel(rect.StrokeWidth*p.pixScale, 1.0)
+	p.SetUniform1f(*ps, "stroke_width_half", strokeWidthScaled*0.5)
+
+	rectSizeWidthScaled := x2Scaled - x1Scaled - strokeWidthScaled
+	rectSizeHeightScaled := y2Scaled - y1Scaled - strokeWidthScaled
+	p.SetUniform2f(*ps, "rect_size_half", rectSizeWidthScaled*0.5, rectSizeHeightScaled*0.5)
+
+	size := fyne.NewSize(bounds[2]-bounds[0], bounds[3]-bounds[1])
+	topRightRadiusScaled := roundToPixel(paint.GetMaximumCornerRadius(topRightRadius, topLeftRadius, bottomRightRadius, size)*p.pixScale, 1.0)
+	topLeftRadiusScaled := roundToPixel(paint.GetMaximumCornerRadius(topLeftRadius, topRightRadius, bottomLeftRadius, size)*p.pixScale, 1.0)
+	bottomRightRadiusScaled := roundToPixel(paint.GetMaximumCornerRadius(bottomRightRadius, bottomLeftRadius, topRightRadius, size)*p.pixScale, 1.0)
+	bottomLeftRadiusScaled := roundToPixel(paint.GetMaximumCornerRadius(bottomLeftRadius, bottomRightRadius, topLeftRadius, size)*p.pixScale, 1.0)
+	p.SetUniform4f(*ps, "radius", topRightRadiusScaled, bottomRightRadiusScaled, topLeftRadiusScaled, bottomLeftRadiusScaled)
+
+	edgeSoftnessScaled := roundToPixel(edgeSoftness*p.pixScale, 1.0)
+	p.SetUniform1f(*ps, "edge_softness", edgeSoftnessScaled)
+
+	r, g, b, a := getFragmentColor(fill)
+	p.SetUniform4f(*ps, "fill_color", r, g, b, a)
+
+	strokeColor := stroke
+	if strokeColor == nil {
+		strokeColor = color.Transparent
+	}
+	r, g, b, a = getFragmentColor(strokeColor)
+	p.SetUniform4f(*ps, "stroke_color", r, g, b, a)
+
+	// User custom uniforms
+	for name, vals := range rect.Uniforms {
+		switch len(vals) {
+		case 1:
+			p.SetUniform1f(*ps, name, vals[0])
+		case 2:
+			p.SetUniform2f(*ps, name, vals[0], vals[1])
+		case 4:
+			p.SetUniform4f(*ps, name, vals[0], vals[1], vals[2], vals[3])
+		}
+	}
+	p.logError()
 
 	p.ctx.DrawArrays(triangleStrip, 0, 4)
 	p.logError()

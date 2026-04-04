@@ -20,6 +20,8 @@ type Line struct {
 
 	StrokeColor color.Color // The line stroke color
 	StrokeWidth float32     // The stroke width of the line
+
+	effectList // Composable shader effects support
 }
 
 // Size returns the current size of bounding box for this line object

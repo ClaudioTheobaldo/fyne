@@ -52,7 +52,20 @@ var (
 
 	//go:embed shaders/nv_semiplanar_hibit_es.frag
 	shaderNvSemiplanarHibitesFrag []byte
+
+	//go:embed shaders/effect_passthrough_es.vert
+	shaderEffectPassthroughesVert []byte
+
+	//go:embed shaders/effect_passthrough_es.frag
+	shaderEffectPassthroughesFrag []byte
 )
+
+func isGLES() bool { return true }
+
+func shaderRectVertexSrc() []byte { return shaderRectangleesVert }
+
+func effectPassthroughVertSrc() []byte { return shaderEffectPassthroughesVert }
+func effectPassthroughFragSrc() []byte { return shaderEffectPassthroughesFrag }
 
 func shaderSourceNamed(name string) ([]byte, []byte) {
 	switch name {

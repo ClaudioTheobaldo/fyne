@@ -62,6 +62,8 @@ type painter struct {
 	pixScale              float32 // pre-calculate scale*texScale for each draw
 	pboStates             map[*canvas.StreamingImage]*pboState
 	rawPBOStates          map[*canvas.StreamingImage]*streamPBOState
+	shaderCache           map[string]*ProgramState // cached user shader programs keyed by fragment source
+	effectPipe            effectPipeline           // FBO-based effect rendering pipeline
 }
 
 type ProgramState struct {
@@ -77,7 +79,10 @@ type UniformState struct {
 }
 
 func (p *painter) SetUniform1f(pState ProgramState, name string, v float32) {
-	u := pState.uniforms[name]
+	u, ok := pState.uniforms[name]
+	if !ok {
+		return
+	}
 	if u.prev[0] == v {
 		return
 	}
@@ -86,7 +91,10 @@ func (p *painter) SetUniform1f(pState ProgramState, name string, v float32) {
 }
 
 func (p *painter) SetUniform2f(pState ProgramState, name string, v0, v1 float32) {
-	u := pState.uniforms[name]
+	u, ok := pState.uniforms[name]
+	if !ok {
+		return
+	}
 	if u.prev[0] == v0 && u.prev[1] == v1 {
 		return
 	}
@@ -95,8 +103,25 @@ func (p *painter) SetUniform2f(pState ProgramState, name string, v0, v1 float32)
 	p.ctx.Uniform2f(u.ref, v0, v1)
 }
 
+func (p *painter) SetUniform3f(pState ProgramState, name string, v0, v1, v2 float32) {
+	u, ok := pState.uniforms[name]
+	if !ok {
+		return
+	}
+	if u.prev[0] == v0 && u.prev[1] == v1 && u.prev[2] == v2 {
+		return
+	}
+	u.prev[0] = v0
+	u.prev[1] = v1
+	u.prev[2] = v2
+	p.ctx.Uniform3f(u.ref, v0, v1, v2)
+}
+
 func (p *painter) SetUniform4f(pState ProgramState, name string, v0, v1, v2, v3 float32) {
-	u := pState.uniforms[name]
+	u, ok := pState.uniforms[name]
+	if !ok {
+		return
+	}
 	if u.prev[0] == v0 && u.prev[1] == v1 && u.prev[2] == v2 && u.prev[3] == v3 {
 		return
 	}
@@ -237,4 +262,84 @@ func (p *painter) createProgram(shaderFilename string) Program {
 
 func (p *painter) logError() {
 	logGLError(p.ctx.GetError)
+}
+
+// getOrCompileShaderProgram returns a cached ProgramState for the given fragment shader source,
+// compiling and linking it on first use. The standard rectangle vertex shader is always used.
+// Returns nil if compilation or linking fails.
+func (p *painter) getOrCompileShaderProgram(fragSrc string) *ProgramState {
+	if ps, ok := p.shaderCache[fragSrc]; ok {
+		return ps
+	}
+
+	vertSrc := string(shaderRectVertexSrc())
+
+	vertShader, err := p.compileShader(vertSrc, vertexShader)
+	if err != nil {
+		fyne.LogError("ShaderRect: failed to compile vertex shader", err)
+		return nil
+	}
+	fragShader, err := p.compileShader(fragSrc, fragmentShader)
+	if err != nil {
+		fyne.LogError("ShaderRect: failed to compile fragment shader", err)
+		return nil
+	}
+
+	prog := p.ctx.CreateProgram()
+	p.ctx.AttachShader(prog, vertShader)
+	p.ctx.AttachShader(prog, fragShader)
+	p.ctx.LinkProgram(prog)
+
+	if p.ctx.GetProgrami(prog, linkStatus) == glFalse {
+		info := p.ctx.GetProgramInfoLog(prog)
+		fyne.LogError("ShaderRect: failed to link program", fmt.Errorf("%s", info))
+		return nil
+	}
+
+	p.ctx.UseProgram(prog)
+
+	ps := &ProgramState{
+		ref:        prog,
+		buff:       p.createBuffer(16),
+		uniforms:   make(map[string]*UniformState),
+		attributes: make(map[string]Attribute),
+	}
+
+	// Discover standard uniforms (skip those not present in the user's shader)
+	standardUniforms := []string{
+		"frame_size", "rect_coords",
+		"stroke_width_half", "rect_size_half",
+		"radius", "edge_softness",
+		"fill_color", "stroke_color",
+	}
+	for _, name := range standardUniforms {
+		loc := p.ctx.GetUniformLocation(prog, name)
+		if loc >= 0 {
+			ps.uniforms[name] = &UniformState{ref: loc}
+		}
+	}
+
+	// Enable standard vertex attributes
+	for _, name := range []string{"vert", "normal"} {
+		a := p.ctx.GetAttribLocation(prog, name)
+		p.ctx.EnableVertexAttribArray(a)
+		ps.attributes[name] = a
+	}
+
+	p.shaderCache[fragSrc] = ps
+	return ps
+}
+
+// discoverCustomUniforms discovers and sets custom uniform locations for a ShaderRect.
+// This is called each draw to handle uniforms that weren't in the standard set.
+func (p *painter) discoverCustomUniforms(ps *ProgramState, prog Program, uniforms map[string][]float32) {
+	for name := range uniforms {
+		if _, ok := ps.uniforms[name]; ok {
+			continue // already known
+		}
+		loc := p.ctx.GetUniformLocation(prog, name)
+		if loc >= 0 {
+			ps.uniforms[name] = &UniformState{ref: loc}
+		}
+	}
 }

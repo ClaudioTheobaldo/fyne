@@ -84,6 +84,14 @@ typedef enum {
 	glfnUseProgram,
 	glfnVertexAttribPointer,
 	glfnViewport,
+	glfnGenFramebuffer,
+	glfnDeleteFramebuffer,
+	glfnBindFramebuffer,
+	glfnFramebufferTexture2D,
+	glfnCheckFramebufferStatus,
+	glfnUniform3f,
+	glfnUniformMatrix3fv,
+	glfnUniformMatrix4fv,
 } glfn;
 
 // TODO: generate this type from fn.go.

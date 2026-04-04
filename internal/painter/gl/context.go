@@ -53,4 +53,16 @@ type context interface {
 	UseProgram(program Program)
 	VertexAttribPointerWithOffset(attribute Attribute, size int, typ uint32, normalized bool, stride, offset int)
 	Viewport(x, y, width, height int)
+
+	// Framebuffer operations (for effect pipeline)
+	CreateFramebuffer() Framebuffer
+	DeleteFramebuffer(fb Framebuffer)
+	BindFramebuffer(target uint32, fb Framebuffer)
+	FramebufferTexture2D(target, attachment, textarget uint32, texture Texture, level int)
+	CheckFramebufferStatus(target uint32) uint32
+
+	// Additional uniform types (for effect pipeline)
+	Uniform3f(uniform Uniform, v0, v1, v2 float32)
+	UniformMatrix3fv(uniform Uniform, transpose bool, value [9]float32)
+	UniformMatrix4fv(uniform Uniform, transpose bool, value [16]float32)
 }

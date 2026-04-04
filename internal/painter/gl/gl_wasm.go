@@ -53,6 +53,8 @@ type (
 	Attribute gl.Attrib
 	// Buffer represents a GL buffer
 	Buffer gl.Buffer
+	// Framebuffer represents a GL framebuffer object
+	Framebuffer gl.Framebuffer
 	// Program represents a compiled GL program
 	Program gl.Program
 	// Shader represents a GL shader
@@ -64,7 +66,14 @@ type (
 var (
 	noBuffer          = Buffer(gl.NoBuffer)
 	noShader          = Shader(gl.NoShader)
+	noFramebuffer     = Framebuffer(gl.NoFramebuffer)
 	textureFilterToGL = [...]int32{gl.LINEAR, gl.NEAREST, gl.LINEAR}
+)
+
+const (
+	glFramebuffer       = gl.FRAMEBUFFER
+	colorAttachment0    = gl.COLOR_ATTACHMENT0
+	framebufferComplete = gl.FRAMEBUFFER_COMPLETE
 )
 
 func (p *painter) Init() {
@@ -145,6 +154,9 @@ func (p *painter) Init() {
 		"fill_color",
 	)
 	p.enableAttribArrays(p.arcProgram, "vert", "normal")
+
+	p.shaderCache = make(map[string]*ProgramState)
+	p.initEffectPipeline()
 }
 
 func (p *painter) getUniformLocations(pState ProgramState, names ...string) {
@@ -372,6 +384,38 @@ func (c *xjsContext) VertexAttribPointerWithOffset(attribute Attribute, size int
 
 func (c *xjsContext) Viewport(x, y, width, height int) {
 	gl.Viewport(x, y, width, height)
+}
+
+func (c *xjsContext) CreateFramebuffer() Framebuffer {
+	return Framebuffer(gl.CreateFramebuffer())
+}
+
+func (c *xjsContext) DeleteFramebuffer(fb Framebuffer) {
+	gl.DeleteFramebuffer(gl.Framebuffer(fb))
+}
+
+func (c *xjsContext) BindFramebuffer(target uint32, fb Framebuffer) {
+	gl.BindFramebuffer(gl.Enum(target), gl.Framebuffer(fb))
+}
+
+func (c *xjsContext) FramebufferTexture2D(target, attachment, textarget uint32, texture Texture, level int) {
+	gl.FramebufferTexture2D(gl.Enum(target), gl.Enum(attachment), gl.Enum(textarget), gl.Texture(texture), level)
+}
+
+func (c *xjsContext) CheckFramebufferStatus(target uint32) uint32 {
+	return uint32(gl.CheckFramebufferStatus(gl.Enum(target)))
+}
+
+func (c *xjsContext) Uniform3f(uniform Uniform, v0, v1, v2 float32) {
+	gl.Uniform3f(gl.Uniform(uniform), v0, v1, v2)
+}
+
+func (c *xjsContext) UniformMatrix3fv(uniform Uniform, transpose bool, value [9]float32) {
+	gl.UniformMatrix3fv(gl.Uniform(uniform), value[:])
+}
+
+func (c *xjsContext) UniformMatrix4fv(uniform Uniform, transpose bool, value [16]float32) {
+	gl.UniformMatrix4fv(gl.Uniform(uniform), value[:])
 }
 
 // toLEByteOrder returns the byte representation of float32 values in little endian byte order.

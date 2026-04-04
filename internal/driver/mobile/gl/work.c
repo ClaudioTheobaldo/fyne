@@ -188,6 +188,33 @@ uintptr_t processFn(struct fnargs* args, char* parg) {
 	case glfnViewport:
 		glViewport((GLint)args->a0, (GLint)args->a1, (GLint)args->a2, (GLint)args->a3);
 		break;
+	case glfnGenFramebuffer:
+		glGenFramebuffers(1, (GLuint*)&ret);
+		break;
+	case glfnDeleteFramebuffer:
+		{
+			GLuint fb = (GLuint)args->a0;
+			glDeleteFramebuffers(1, &fb);
+		}
+		break;
+	case glfnBindFramebuffer:
+		glBindFramebuffer((GLenum)args->a0, (GLuint)args->a1);
+		break;
+	case glfnFramebufferTexture2D:
+		glFramebufferTexture2D((GLenum)args->a0, (GLenum)args->a1, (GLenum)args->a2, (GLuint)args->a3, (GLint)args->a4);
+		break;
+	case glfnCheckFramebufferStatus:
+		ret = glCheckFramebufferStatus((GLenum)args->a0);
+		break;
+	case glfnUniform3f:
+		glUniform3f((GLint)args->a0, *(GLfloat*)&args->a1, *(GLfloat*)&args->a2, *(GLfloat*)&args->a3);
+		break;
+	case glfnUniformMatrix3fv:
+		glUniformMatrix3fv((GLint)args->a0, (GLsizei)args->a1, 0, (GLvoid*)parg);
+		break;
+	case glfnUniformMatrix4fv:
+		glUniformMatrix4fv((GLint)args->a0, (GLsizei)args->a1, 0, (GLvoid*)parg);
+		break;
 	}
 	return ret;
 }

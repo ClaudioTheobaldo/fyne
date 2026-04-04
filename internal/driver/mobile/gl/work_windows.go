@@ -280,6 +280,39 @@ var glfnFuncs = [...]func(c call) (ret uintptr){
 		syscall.SyscallN(glViewport.Addr(), c.args.a0, c.args.a1, c.args.a2, c.args.a3)
 		return ret
 	},
+	glfnGenFramebuffer: func(c call) (ret uintptr) {
+		syscall.SyscallN(glGenFramebuffers.Addr(), 1, uintptr(unsafe.Pointer(&ret)))
+		return ret
+	},
+	glfnDeleteFramebuffer: func(c call) (ret uintptr) {
+		v := c.args.a0
+		syscall.SyscallN(glDeleteFramebuffers.Addr(), 1, uintptr(unsafe.Pointer(&v)))
+		return ret
+	},
+	glfnBindFramebuffer: func(c call) (ret uintptr) {
+		syscall.SyscallN(glBindFramebuffer.Addr(), c.args.a0, c.args.a1)
+		return ret
+	},
+	glfnFramebufferTexture2D: func(c call) (ret uintptr) {
+		syscall.SyscallN(glFramebufferTexture2D.Addr(), c.args.a0, c.args.a1, c.args.a2, c.args.a3, c.args.a4)
+		return ret
+	},
+	glfnCheckFramebufferStatus: func(c call) (ret uintptr) {
+		ret, _, _ = syscall.SyscallN(glCheckFramebufferStatus.Addr(), c.args.a0)
+		return ret
+	},
+	glfnUniform3f: func(c call) (ret uintptr) {
+		syscall.SyscallN(glUniform3f.Addr(), c.args.a0, c.args.a1, c.args.a2, c.args.a3)
+		return ret
+	},
+	glfnUniformMatrix3fv: func(c call) (ret uintptr) {
+		syscall.SyscallN(glUniformMatrix3fv.Addr(), c.args.a0, c.args.a1, 0, uintptr(c.parg))
+		return ret
+	},
+	glfnUniformMatrix4fv: func(c call) (ret uintptr) {
+		syscall.SyscallN(glUniformMatrix4fv.Addr(), c.args.a0, c.args.a1, 0, uintptr(c.parg))
+		return ret
+	},
 }
 
 func (ctx *context) doWork(c call) (ret uintptr) {
@@ -351,4 +384,12 @@ var (
 	glUseProgram              = libGLESv2.NewProc("glUseProgram")
 	glVertexAttribPointer     = libGLESv2.NewProc("glVertexAttribPointer")
 	glViewport                = libGLESv2.NewProc("glViewport")
+	glGenFramebuffers         = libGLESv2.NewProc("glGenFramebuffers")
+	glDeleteFramebuffers      = libGLESv2.NewProc("glDeleteFramebuffers")
+	glBindFramebuffer         = libGLESv2.NewProc("glBindFramebuffer")
+	glFramebufferTexture2D    = libGLESv2.NewProc("glFramebufferTexture2D")
+	glCheckFramebufferStatus  = libGLESv2.NewProc("glCheckFramebufferStatus")
+	glUniform3f               = libGLESv2.NewProc("glUniform3f")
+	glUniformMatrix3fv        = libGLESv2.NewProc("glUniformMatrix3fv")
+	glUniformMatrix4fv        = libGLESv2.NewProc("glUniformMatrix4fv")
 )
