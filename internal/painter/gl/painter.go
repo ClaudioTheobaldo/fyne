@@ -150,6 +150,13 @@ func (p *painter) Clear() {
 }
 
 func (p *painter) Free(obj fyne.CanvasObject) {
+	// Don't free StreamingImage textures/PBO on layout changes — they manage
+	// their own frame lifecycle via UpdateFrame/UpdateRawFrame. Freeing them
+	// during layout repositioning causes a white flash because the texture
+	// and PBO state are destroyed before the next repaint.
+	if _, isStreaming := obj.(*canvas.StreamingImage); isStreaming {
+		return
+	}
 	p.freeTexture(obj)
 }
 

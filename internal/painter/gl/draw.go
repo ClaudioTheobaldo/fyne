@@ -495,21 +495,27 @@ func (p *painter) drawStreamingImage(img *canvas.StreamingImage, pos fyne.Positi
 	rawFrame := img.ConsumePendingRawFrame()
 	newRGBAFrame := img.ConsumePendingFrame()
 
+	// Determine which rendering path to use:
+	// 1. New RGBA frame pending (UpdateFrame) → RGBA path, clear stale PBO
+	// 2. New raw frame pending (UpdateRawFrame) or existing PBO state → raw path
+	// 3. Neither pending → use whichever cached state exists (raw PBO or RGBA texture)
+	hasRawState := p.rawPBOStates != nil && p.rawPBOStates[img] != nil && p.rawPBOStates[img].ready
+
 	if newRGBAFrame != nil && rawFrame == nil {
-		// RGBA frame takes priority — clear stale raw PBO state so we don't
-		// keep falling into the raw path on subsequent repaints.
+		// RGBA frame takes priority — clear stale raw PBO state so subsequent
+		// repaints without new data use the RGBA texture cache, not stale PBO.
 		if p.rawPBOStates != nil {
 			delete(p.rawPBOStates, img)
 		}
-	} else {
-		hasRawState := p.rawPBOStates != nil && p.rawPBOStates[img] != nil && p.rawPBOStates[img].ready
-		if rawFrame != nil || hasRawState {
-			p.drawStreamingImageRaw(img, rawFrame, pos, frame)
-			return
-		}
+		hasRawState = false
 	}
 
-	// Legacy RGBA path (UpdateFrame).
+	if rawFrame != nil || hasRawState {
+		p.drawStreamingImageRaw(img, rawFrame, pos, frame)
+		return
+	}
+
+	// RGBA path.
 	t0 := time.Now()
 	defer func() {
 		BenchStreamDrawNs.Add(time.Since(t0).Nanoseconds())
@@ -522,6 +528,10 @@ func (p *painter) drawStreamingImage(img *canvas.StreamingImage, pos fyne.Positi
 	} else if existingTex, cached := cache.GetTexture(img); cached {
 		texture = Texture(existingTex)
 	} else {
+		// Nothing to draw — no pending frame and no cached texture.
+		// This only happens before the very first frame arrives.
+		// Do NOT clear the screen — just skip drawing this object entirely
+		// so the previous content (if any) remains visible via the framebuffer.
 		return
 	}
 
