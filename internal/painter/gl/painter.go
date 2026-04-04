@@ -132,17 +132,6 @@ func (p *painter) SetUniform4f(pState ProgramState, name string, v0, v1, v2, v3 
 	p.ctx.Uniform4f(u.ref, v0, v1, v2, v3)
 }
 
-func (p *painter) SetUniform3f(pState ProgramState, name string, v0, v1, v2 float32) {
-	u := pState.uniforms[name]
-	if u.prev[0] == v0 && u.prev[1] == v1 && u.prev[2] == v2 {
-		return
-	}
-	u.prev[0] = v0
-	u.prev[1] = v1
-	u.prev[2] = v2
-	p.ctx.Uniform3f(u.ref, v0, v1, v2)
-}
-
 func (p *painter) UpdateVertexArray(pState ProgramState, name string, size, stride, offset int) {
 	a := pState.attributes[name]
 

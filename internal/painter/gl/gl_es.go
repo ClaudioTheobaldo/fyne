@@ -553,10 +553,6 @@ func (c *esContext) CheckFramebufferStatus(target uint32) uint32 {
 	return gl.CheckFramebufferStatus(target)
 }
 
-func (c *esContext) Uniform3f(uniform Uniform, v0, v1, v2 float32) {
-	gl.Uniform3f(int32(uniform), v0, v1, v2)
-}
-
 func (c *esContext) UniformMatrix3fv(uniform Uniform, transpose bool, value [9]float32) {
 	gl.UniformMatrix3fv(int32(uniform), 1, transpose, &value[0])
 }

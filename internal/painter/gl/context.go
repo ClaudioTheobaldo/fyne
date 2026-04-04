@@ -62,7 +62,6 @@ type context interface {
 	CheckFramebufferStatus(target uint32) uint32
 
 	// Additional uniform types (for effect pipeline)
-	Uniform3f(uniform Uniform, v0, v1, v2 float32)
 	UniformMatrix3fv(uniform Uniform, transpose bool, value [9]float32)
 	UniformMatrix4fv(uniform Uniform, transpose bool, value [16]float32)
 }
