@@ -743,7 +743,7 @@ func (w *window) create() {
 		glfw.WindowHint(glfw.Resizable, glfw.True)
 	}
 	glfw.WindowHint(glfw.AutoIconify, glfw.False)
-	initWindowHints()
+	initWindowHints(w.driver.msaaSamples())
 
 	pixWidth, pixHeight := w.screenSize(w.canvas.size)
 	pixWidth = int(fyne.Max(float32(pixWidth), float32(w.width)))

@@ -2,4 +2,4 @@
 
 package glfw
 
-func initWindowHints() {}
+func initWindowHints(msaaSamples int) {}

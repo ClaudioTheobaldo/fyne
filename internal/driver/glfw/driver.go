@@ -12,6 +12,7 @@ import (
 	"github.com/fyne-io/image/ico"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas/aa"
 	"fyne.io/fyne/v2/internal/animation"
 	intapp "fyne.io/fyne/v2/internal/app"
 	"fyne.io/fyne/v2/internal/driver"
@@ -37,7 +38,15 @@ type gLDriver struct {
 
 	trayStart, trayStop func()     // shut down the system tray, if used
 	systrayMenu         *fyne.Menu // cache the menu set so we know when to refresh
+
+	aaMode aa.Mode // active anti-aliasing mode for MSAA window hints
 }
+
+// msaaSamples returns the MSAA sample count requested by the current AA mode.
+func (d *gLDriver) msaaSamples() int { return d.aaMode.Samples() }
+
+// SetAntiAliasingMode sets the driver-wide AA mode used for new windows.
+func (d *gLDriver) SetAntiAliasingMode(mode aa.Mode) { d.aaMode = mode }
 
 func (d *gLDriver) init() {
 	if !d.initialized {

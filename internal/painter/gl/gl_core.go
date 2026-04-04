@@ -75,6 +75,11 @@ const (
 	glFramebuffer       = gl.FRAMEBUFFER
 	colorAttachment0    = gl.COLOR_ATTACHMENT0
 	framebufferComplete = gl.FRAMEBUFFER_COMPLETE
+n	// MSAA constants
+	glRenderbuffer       = gl.RENDERBUFFER
+	glDrawFramebuffer    = gl.DRAW_FRAMEBUFFER
+	glReadFramebuffer    = gl.READ_FRAMEBUFFER
+	glLinear             = gl.LINEAR
 )
 
 var textureFilterToGL = [...]int32{gl.LINEAR, gl.NEAREST, gl.LINEAR}
@@ -89,6 +94,9 @@ func (p *painter) Init() {
 
 	gl.Disable(gl.DEPTH_TEST)
 	gl.Enable(gl.BLEND)
+	if p.aaMode.NeedsMSAA() {
+		gl.Enable(gl.MULTISAMPLE)
+	}
 	p.logError()
 	p.program = ProgramState{
 		ref:        p.createProgram("simple"),
@@ -570,4 +578,33 @@ func (c *coreContext) UniformMatrix3fv(uniform Uniform, transpose bool, value [9
 
 func (c *coreContext) UniformMatrix4fv(uniform Uniform, transpose bool, value [16]float32) {
 	gl.UniformMatrix4fv(int32(uniform), 1, transpose, &value[0])
+}
+
+// --- Renderbuffer operations for MSAA ---
+
+func (c *coreContext) CreateRenderbuffer() Renderbuffer {
+	var rbo uint32
+	gl.GenRenderbuffers(1, &rbo)
+	return Renderbuffer(rbo)
+}
+
+func (c *coreContext) DeleteRenderbuffer(rb Renderbuffer) {
+	v := uint32(rb)
+	gl.DeleteRenderbuffers(1, &v)
+}
+
+func (c *coreContext) BindRenderbuffer(target uint32, rb Renderbuffer) {
+	gl.BindRenderbuffer(target, uint32(rb))
+}
+
+func (c *coreContext) RenderbufferStorageMultisample(target uint32, samples int32, internalformat uint32, width, height int32) {
+	gl.RenderbufferStorageMultisample(target, samples, internalformat, width, height)
+}
+
+func (c *coreContext) FramebufferRenderbuffer(target, attachment, rbTarget uint32, rb Renderbuffer) {
+	gl.FramebufferRenderbuffer(target, attachment, rbTarget, uint32(rb))
+}
+
+func (c *coreContext) BlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1 int32, mask, filter uint32) {
+	gl.BlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter)
 }

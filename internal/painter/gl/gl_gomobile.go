@@ -75,6 +75,11 @@ const (
 	glFramebuffer       uint32 = 0x8D40 // GL_FRAMEBUFFER
 	colorAttachment0    uint32 = 0x8CE0 // GL_COLOR_ATTACHMENT0
 	framebufferComplete uint32 = 0x8CD5 // GL_FRAMEBUFFER_COMPLETE
+n	// MSAA constants (unused on mobile, but needed for compilation)
+	glRenderbuffer    uint32 = 0x8D41
+	glDrawFramebuffer uint32 = 0x8CA9
+	glReadFramebuffer uint32 = 0x8CA8
+	glLinear          uint32 = 0x2601
 )
 
 func (p *painter) glctx() gl.Context {
@@ -456,3 +461,12 @@ func toLEByteOrder(values ...float32) []byte {
 	}
 	return b
 }
+
+// --- Renderbuffer no-op stubs (mobile does not support MSAA renderbuffers) ---
+
+func (c *mobileContext) CreateRenderbuffer() Renderbuffer                             { return 0 }
+func (c *mobileContext) DeleteRenderbuffer(_ Renderbuffer)                            {}
+func (c *mobileContext) BindRenderbuffer(_ uint32, _ Renderbuffer)                    {}
+func (c *mobileContext) RenderbufferStorageMultisample(_ uint32, _ int32, _ uint32, _, _ int32) {}
+func (c *mobileContext) FramebufferRenderbuffer(_, _, _ uint32, _ Renderbuffer)       {}
+func (c *mobileContext) BlitFramebuffer(_, _, _, _, _, _, _, _ int32, _, _ uint32)    {}

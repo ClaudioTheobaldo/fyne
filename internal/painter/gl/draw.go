@@ -25,7 +25,14 @@ var BenchImageDrawCount atomic.Int64
 // BenchStreamDrawCount counts drawStreamingImage invocations (for benchmarking).
 var BenchStreamDrawCount atomic.Int64
 
-const edgeSoftness = 1.0
+// edgeSoftness returns the SDF edge softness value based on the current AA mode.
+// When AA is Off, returns 0 (hard edges); otherwise returns 1.0.
+func (p *painter) edgeSoftness() float32 {
+	if !p.aaMode.NeedsSDF() {
+		return 0.0
+	}
+	return 1.0
+}
 
 func (p *painter) createBuffer(size int) Buffer {
 	vbo := p.ctx.CreateBuffer()
@@ -79,7 +86,7 @@ func (p *painter) drawCircle(circle *canvas.Circle, pos fyne.Position, frame fyn
 	r, g, b, a = getFragmentColor(strokeColor)
 	p.SetUniform4f(program, "stroke_color", r, g, b, a)
 
-	edgeSoftnessScaled := roundToPixel(edgeSoftness*p.pixScale, 1.0)
+	edgeSoftnessScaled := roundToPixel(p.edgeSoftness()*p.pixScale, 1.0)
 	p.SetUniform1f(program, "edge_softness", edgeSoftnessScaled)
 	p.logError()
 	// Fragment: END
@@ -103,7 +110,11 @@ func (p *painter) drawLine(line *canvas.Line, pos fyne.Position, frame fyne.Size
 	if line.StrokeColor == color.Transparent || line.StrokeColor == nil || line.StrokeWidth == 0 {
 		return
 	}
-	points, halfWidth, feather := p.lineCoords(pos, line.Position1, line.Position2, line.StrokeWidth, 0.5, frame)
+	featherVal := float32(0.5)
+	if !p.aaMode.NeedsSDF() {
+		featherVal = 0.0
+	}
+	points, halfWidth, feather := p.lineCoords(pos, line.Position1, line.Position2, line.StrokeWidth, featherVal, frame)
 	p.ctx.UseProgram(p.lineProgram.ref)
 	p.updateBuffer(p.lineProgram.buff, points)
 	p.UpdateVertexArray(p.lineProgram, "vert", 2, 4, 0)
@@ -227,7 +238,7 @@ func (p *painter) drawOblong(obj fyne.CanvasObject, fill, stroke color.Color, st
 		)
 		p.SetUniform4f(program, "radius", topRightRadiusScaled, bottomRightRadiusScaled, topLeftRadiusScaled, bottomLeftRadiusScaled)
 
-		edgeSoftnessScaled := roundToPixel(edgeSoftness*p.pixScale, 1.0)
+		edgeSoftnessScaled := roundToPixel(p.edgeSoftness()*p.pixScale, 1.0)
 		p.SetUniform1f(program, "edge_softness", edgeSoftnessScaled)
 	} else {
 		p.SetUniform1f(program, "stroke_width", strokeWidthScaled)
@@ -311,7 +322,7 @@ func (p *painter) drawShaderRect(rect *canvas.ShaderRect, pos fyne.Position, fra
 	bottomLeftRadiusScaled := roundToPixel(paint.GetMaximumCornerRadius(bottomLeftRadius, bottomRightRadius, topLeftRadius, size)*p.pixScale, 1.0)
 	p.SetUniform4f(*ps, "radius", topRightRadiusScaled, bottomRightRadiusScaled, topLeftRadiusScaled, bottomLeftRadiusScaled)
 
-	edgeSoftnessScaled := roundToPixel(edgeSoftness*p.pixScale, 1.0)
+	edgeSoftnessScaled := roundToPixel(p.edgeSoftness()*p.pixScale, 1.0)
 	p.SetUniform1f(*ps, "edge_softness", edgeSoftnessScaled)
 
 	r, g, b, a := getFragmentColor(fill)
@@ -366,7 +377,7 @@ func (p *painter) drawPolygon(polygon *canvas.Polygon, pos fyne.Position, frame 
 	x1Scaled, x2Scaled, y1Scaled, y2Scaled := p.scaleRectCoords(bounds[0], bounds[2], bounds[1], bounds[3])
 	p.SetUniform4f(program, "rect_coords", x1Scaled, x2Scaled, y1Scaled, y2Scaled)
 
-	edgeSoftnessScaled := roundToPixel(edgeSoftness*p.pixScale, 1.0)
+	edgeSoftnessScaled := roundToPixel(p.edgeSoftness()*p.pixScale, 1.0)
 	p.SetUniform1f(program, "edge_softness", edgeSoftnessScaled)
 
 	outerRadius := fyne.Min(size.Width, size.Height) / 2
@@ -424,7 +435,7 @@ func (p *painter) drawArc(arc *canvas.Arc, pos fyne.Position, frame fyne.Size) {
 	x1Scaled, x2Scaled, y1Scaled, y2Scaled := p.scaleRectCoords(bounds[0], bounds[2], bounds[1], bounds[3])
 	p.SetUniform4f(program, "rect_coords", x1Scaled, x2Scaled, y1Scaled, y2Scaled)
 
-	edgeSoftnessScaled := roundToPixel(edgeSoftness*p.pixScale, 1.0)
+	edgeSoftnessScaled := roundToPixel(p.edgeSoftness()*p.pixScale, 1.0)
 	p.SetUniform1f(program, "edge_softness", edgeSoftnessScaled)
 
 	outerRadius := fyne.Min(arc.Size().Width, arc.Size().Height) / 2
@@ -1098,7 +1109,7 @@ func (p *painter) vecRectCoordsWithPad(pos fyne.Position, rect fyne.CanvasObject
 	size.Height = roundToPixel(size.Height-2*yPad, p.pixScale)
 
 	// without edge softness adjustment the rectangle has cropped edges
-	edgeSoftnessScaled := roundToPixel(edgeSoftness*p.pixScale, 1.0)
+	edgeSoftnessScaled := roundToPixel(p.edgeSoftness()*p.pixScale, 1.0)
 	x1Pos := pos1.X
 	x1Norm := -1 + (x1Pos-edgeSoftnessScaled)*2/frame.Width
 	x2Pos := pos1.X + size.Width

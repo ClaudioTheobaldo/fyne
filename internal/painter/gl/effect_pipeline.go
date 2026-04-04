@@ -20,6 +20,11 @@ type effectPipeline struct {
 	customCache   map[string]*ProgramState            // compiled custom shader programs keyed by source
 	initialized   bool
 	allocated     bool // whether FBOs have been allocated (avoids struct comparison on WASM)
+
+	// MSAA support
+	msaaFBO     Framebuffer
+	msaaRBO     Renderbuffer // multisample color renderbuffer
+	msaaSamples int
 }
 
 // fullscreen quad: 2 triangles covering [-1,1] with matching UV [0,1]
@@ -101,6 +106,10 @@ func (p *painter) ensureFBOSize(w, h int) {
 		p.ctx.DeleteFramebuffer(ep.fboB)
 		p.ctx.DeleteTexture(ep.texA)
 		p.ctx.DeleteTexture(ep.texB)
+		if ep.msaaSamples > 0 {
+			p.ctx.DeleteFramebuffer(ep.msaaFBO)
+			p.ctx.DeleteRenderbuffer(ep.msaaRBO)
+		}
 	}
 
 	// Create two RGBA textures
@@ -123,6 +132,25 @@ func (p *painter) ensureFBOSize(w, h int) {
 	status = p.ctx.CheckFramebufferStatus(glFramebuffer)
 	if status != framebufferComplete {
 		fyne.LogError("EffectPipeline: FBO B incomplete", fmt.Errorf("status: 0x%x", status))
+	}
+
+	// Create MSAA FBO if hardware multisampling is active
+	if p.aaMode.NeedsMSAA() {
+		samples := int32(p.aaMode.Samples())
+		ep.msaaRBO = p.ctx.CreateRenderbuffer()
+		p.ctx.BindRenderbuffer(glRenderbuffer, ep.msaaRBO)
+		p.ctx.RenderbufferStorageMultisample(glRenderbuffer, samples, colorFormatRGBA, int32(w), int32(h))
+
+		ep.msaaFBO = p.ctx.CreateFramebuffer()
+		p.ctx.BindFramebuffer(glFramebuffer, ep.msaaFBO)
+		p.ctx.FramebufferRenderbuffer(glFramebuffer, colorAttachment0, glRenderbuffer, ep.msaaRBO)
+		status = p.ctx.CheckFramebufferStatus(glFramebuffer)
+		if status != framebufferComplete {
+			fyne.LogError("EffectPipeline: MSAA FBO incomplete", fmt.Errorf("status: 0x%x", status))
+		}
+		ep.msaaSamples = int(samples)
+	} else {
+		ep.msaaSamples = 0
 	}
 
 	// Unbind FBO (bind default framebuffer 0)
@@ -354,15 +382,29 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 	// Save viewport state
 	// (Fyne's viewport is set once per frame, we restore it after)
 
-	// Step 1: Render object into FBO A
-	p.ctx.BindFramebuffer(glFramebuffer, ep.fboA)
-	p.ctx.Viewport(0, 0, w, h)
-	p.ctx.ClearColor(0, 0, 0, 0)
-	p.ctx.Clear(bitColorBuffer)
-
-	// Draw object at origin, filling the FBO
+	// Step 1: Render object into FBO A (via MSAA FBO + resolve if active)
 	fboFrame := fyne.NewSize(objSize.Width, objSize.Height)
-	p.drawObjectDirect(o, fyne.NewPos(0, 0), fboFrame)
+	if ep.msaaSamples > 0 {
+		// Render into multisample FBO
+		p.ctx.BindFramebuffer(glFramebuffer, ep.msaaFBO)
+		p.ctx.Viewport(0, 0, w, h)
+		p.ctx.ClearColor(0, 0, 0, 0)
+		p.ctx.Clear(bitColorBuffer)
+		p.drawObjectDirect(o, fyne.NewPos(0, 0), fboFrame)
+
+		// Resolve MSAA into fboA (texture-backed) via blit
+		p.ctx.BindFramebuffer(glReadFramebuffer, ep.msaaFBO)
+		p.ctx.BindFramebuffer(glDrawFramebuffer, ep.fboA)
+		p.ctx.BlitFramebuffer(0, 0, int32(w), int32(h), 0, 0, int32(w), int32(h), bitColorBuffer, glLinear)
+		p.ctx.BindFramebuffer(glFramebuffer, noFramebuffer)
+	} else {
+		// No MSAA: render directly into fboA
+		p.ctx.BindFramebuffer(glFramebuffer, ep.fboA)
+		p.ctx.Viewport(0, 0, w, h)
+		p.ctx.ClearColor(0, 0, 0, 0)
+		p.ctx.Clear(bitColorBuffer)
+		p.drawObjectDirect(o, fyne.NewPos(0, 0), fboFrame)
+	}
 
 	// Step 2: Ping-pong through effect chain
 	srcTex := ep.texA

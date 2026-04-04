@@ -74,6 +74,11 @@ const (
 	glFramebuffer       = gl.FRAMEBUFFER
 	colorAttachment0    = gl.COLOR_ATTACHMENT0
 	framebufferComplete = gl.FRAMEBUFFER_COMPLETE
+n	// MSAA constants (unused on WASM, but needed for compilation)
+	glRenderbuffer    = uint32(0x8D41)
+	glDrawFramebuffer = uint32(0x8CA9)
+	glReadFramebuffer = uint32(0x8CA8)
+	glLinear          = uint32(0x2601)
 )
 
 func (p *painter) Init() {
@@ -430,3 +435,12 @@ func toLEByteOrder(values ...float32) []byte {
 	}
 	return b
 }
+
+// --- Renderbuffer no-op stubs (WASM does not support MSAA renderbuffers) ---
+
+func (c *xjsContext) CreateRenderbuffer() Renderbuffer                             { return 0 }
+func (c *xjsContext) DeleteRenderbuffer(_ Renderbuffer)                            {}
+func (c *xjsContext) BindRenderbuffer(_ uint32, _ Renderbuffer)                    {}
+func (c *xjsContext) RenderbufferStorageMultisample(_ uint32, _ int32, _ uint32, _, _ int32) {}
+func (c *xjsContext) FramebufferRenderbuffer(_, _, _ uint32, _ Renderbuffer)       {}
+func (c *xjsContext) BlitFramebuffer(_, _, _, _, _, _, _, _ int32, _, _ uint32)    {}

@@ -75,6 +75,11 @@ const (
 	glFramebuffer       = gl.FRAMEBUFFER
 	colorAttachment0    = gl.COLOR_ATTACHMENT0
 	framebufferComplete = gl.FRAMEBUFFER_COMPLETE
+n	// MSAA constants (unused on GLES2, but needed for compilation)
+	glRenderbuffer    = uint32(0x8D41)
+	glDrawFramebuffer = uint32(0x8CA9)
+	glReadFramebuffer = uint32(0x8CA8)
+	glLinear          = uint32(0x2601)
 )
 
 var textureFilterToGL = [...]int32{gl.LINEAR, gl.NEAREST, gl.LINEAR}
@@ -560,3 +565,12 @@ func (c *esContext) UniformMatrix3fv(uniform Uniform, transpose bool, value [9]f
 func (c *esContext) UniformMatrix4fv(uniform Uniform, transpose bool, value [16]float32) {
 	gl.UniformMatrix4fv(int32(uniform), 1, transpose, &value[0])
 }
+
+// --- Renderbuffer no-op stubs (GLES2 does not support MSAA renderbuffers) ---
+
+func (c *esContext) CreateRenderbuffer() Renderbuffer                      { return 0 }
+func (c *esContext) DeleteRenderbuffer(_ Renderbuffer)                     {}
+func (c *esContext) BindRenderbuffer(_ uint32, _ Renderbuffer)             {}
+func (c *esContext) RenderbufferStorageMultisample(_ uint32, _ int32, _ uint32, _, _ int32) {}
+func (c *esContext) FramebufferRenderbuffer(_, _, _ uint32, _ Renderbuffer) {}
+func (c *esContext) BlitFramebuffer(_, _, _, _, _, _, _, _ int32, _, _ uint32) {}

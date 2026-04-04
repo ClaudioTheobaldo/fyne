@@ -7,6 +7,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/canvas/aa"
 	"fyne.io/fyne/v2/internal/driver"
 	"fyne.io/fyne/v2/theme"
 )
@@ -31,12 +32,17 @@ type Painter interface {
 	StartClipping(fyne.Position, fyne.Size)
 	// StopClipping stops clipping paint actions.
 	StopClipping()
+
+	// SetAntiAliasingMode configures the active anti-aliasing technique.
+	SetAntiAliasingMode(mode aa.Mode)
+	// AntiAliasingMode returns the current anti-aliasing mode.
+	AntiAliasingMode() aa.Mode
 }
 
 // NewPainter creates a new GL based renderer for the provided canvas.
 // If it is a master painter it will also initialise OpenGL
 func NewPainter(c fyne.Canvas, ctx driver.WithContext) Painter {
-	p := &painter{canvas: c, contextProvider: ctx}
+	p := &painter{canvas: c, contextProvider: ctx, aaMode: aa.SDF}
 	p.SetFrameBufferScale(1.0)
 	return p
 }
@@ -64,6 +70,7 @@ type painter struct {
 	rawPBOStates          map[*canvas.StreamingImage]*streamPBOState
 	shaderCache           map[string]*ProgramState // cached user shader programs keyed by fragment source
 	effectPipe            effectPipeline           // FBO-based effect rendering pipeline
+	aaMode            aa.Mode              // active anti-aliasing technique
 }
 
 type ProgramState struct {
@@ -165,6 +172,12 @@ func (p *painter) Paint(obj fyne.CanvasObject, pos fyne.Position, frame fyne.Siz
 		p.drawObject(obj, pos, frame)
 	}
 }
+
+// SetAntiAliasingMode configures the active anti-aliasing technique.
+func (p *painter) SetAntiAliasingMode(mode aa.Mode) { p.aaMode = mode }
+
+// AntiAliasingMode returns the current anti-aliasing mode.
+func (p *painter) AntiAliasingMode() aa.Mode { return p.aaMode }
 
 func (p *painter) SetFrameBufferScale(scale float32) {
 	p.texScale = scale

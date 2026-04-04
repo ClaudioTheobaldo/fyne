@@ -64,4 +64,15 @@ type context interface {
 	// Additional uniform types (for effect pipeline)
 	UniformMatrix3fv(uniform Uniform, transpose bool, value [9]float32)
 	UniformMatrix4fv(uniform Uniform, transpose bool, value [16]float32)
+
+	// Renderbuffer operations (for MSAA)
+	CreateRenderbuffer() Renderbuffer
+	DeleteRenderbuffer(rb Renderbuffer)
+	BindRenderbuffer(target uint32, rb Renderbuffer)
+	RenderbufferStorageMultisample(target uint32, samples int32, internalformat uint32, width, height int32)
+	FramebufferRenderbuffer(target, attachment, rbTarget uint32, rb Renderbuffer)
+	BlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1 int32, mask, filter uint32)
 }
+
+// Renderbuffer represents a GL renderbuffer object.
+type Renderbuffer uint32
