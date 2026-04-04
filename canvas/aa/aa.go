@@ -89,3 +89,28 @@ func FromString(s string) Mode {
 		return SDF
 	}
 }
+
+// AADriver is implemented by Fyne drivers that support configurable anti-aliasing.
+// The GLFW desktop driver implements this interface. Use [Apply] to set the mode
+// without a direct type assertion.
+type AADriver interface {
+	SetAntiAliasingMode(mode Mode)
+}
+
+// Apply sets the anti-aliasing mode on the application's driver if it supports AA.
+// Call this BEFORE creating any windows, since MSAA sample counts are window-creation hints.
+// Returns true if the driver accepted the mode, false if it does not support AA.
+//
+// Usage:
+//
+//	myApp := app.NewWithID("MyApp")
+//	aa.Apply(myApp.Driver(), aa.MSAA4X)
+//	win := myApp.NewWindow("Main") // MSAA hint is active for this window
+func Apply(drv interface{}, mode Mode) bool {
+	d, ok := drv.(AADriver)
+	if !ok {
+		return false
+	}
+	d.SetAntiAliasingMode(mode)
+	return true
+}

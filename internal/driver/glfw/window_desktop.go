@@ -769,6 +769,7 @@ func (w *window) create() {
 	// run the GL init on the draw thread
 	w.RunWithContext(func() {
 		w.canvas.SetPainter(gl.NewPainter(w.canvas, w))
+		w.canvas.Painter().SetAntiAliasingMode(w.driver.aaMode)
 		w.canvas.Painter().Init()
 
 		if os.Getenv("FYNE_VSYNC") == "0" {
