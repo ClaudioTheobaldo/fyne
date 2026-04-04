@@ -181,6 +181,19 @@ func (p *painter) getEffectProgram(eff *effect.Effect) *ProgramState {
 		if ps == nil {
 			return &ep.passthrough
 		}
+		// Discover custom uniforms from the effect's own uniform map
+		// so SetUniform* calls can find them at draw time.
+		uniforms := eff.Uniforms()
+		customNames := make([]string, 0, len(uniforms))
+		for name := range uniforms {
+			if _, exists := ps.uniforms[name]; !exists {
+				customNames = append(customNames, name)
+			}
+		}
+		if len(customNames) > 0 {
+			p.ctx.UseProgram(ps.ref)
+			p.discoverEffectUniforms(ps, ps.ref, customNames)
+		}
 		ep.customCache[src] = ps
 		return ps
 	}
