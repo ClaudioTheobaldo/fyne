@@ -489,12 +489,24 @@ func (p *painter) drawText(text *canvas.Text, pos fyne.Position, frame fyne.Size
 }
 
 func (p *painter) drawStreamingImage(img *canvas.StreamingImage, pos fyne.Position, frame fyne.Size) {
-	// Generic raw-frame path: handles all PixelFormat values via UpdateRawFrame.
+	// Check for new raw frame OR new RGBA frame.
+	// If an RGBA frame (UpdateFrame) is pending, it takes priority over stale raw PBO state.
+	// This handles the YUV→RGBA transition (e.g. gap mode showing a blue placeholder).
 	rawFrame := img.ConsumePendingRawFrame()
-	hasRawState := p.rawPBOStates != nil && p.rawPBOStates[img] != nil && p.rawPBOStates[img].ready
-	if rawFrame != nil || hasRawState {
-		p.drawStreamingImageRaw(img, rawFrame, pos, frame)
-		return
+	newRGBAFrame := img.ConsumePendingFrame()
+
+	if newRGBAFrame != nil && rawFrame == nil {
+		// RGBA frame takes priority — clear stale raw PBO state so we don't
+		// keep falling into the raw path on subsequent repaints.
+		if p.rawPBOStates != nil {
+			delete(p.rawPBOStates, img)
+		}
+	} else {
+		hasRawState := p.rawPBOStates != nil && p.rawPBOStates[img] != nil && p.rawPBOStates[img].ready
+		if rawFrame != nil || hasRawState {
+			p.drawStreamingImageRaw(img, rawFrame, pos, frame)
+			return
+		}
 	}
 
 	// Legacy RGBA path (UpdateFrame).
@@ -504,11 +516,9 @@ func (p *painter) drawStreamingImage(img *canvas.StreamingImage, pos fyne.Positi
 		BenchStreamDrawCount.Add(1)
 	}()
 
-	newFrame := img.ConsumePendingFrame()
-
 	var texture Texture
-	if newFrame != nil {
-		texture = p.uploadStreamingFrame(img, newFrame)
+	if newRGBAFrame != nil {
+		texture = p.uploadStreamingFrame(img, newRGBAFrame)
 	} else if existingTex, cached := cache.GetTexture(img); cached {
 		texture = Texture(existingTex)
 	} else {
