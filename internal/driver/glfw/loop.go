@@ -1,9 +1,7 @@
 package glfw
 
 import (
-	"os"
 	"runtime"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -127,14 +125,15 @@ func (d *gLDriver) runGL() {
 	}
 
 	tickRate := 60
-	if v, err := strconv.Atoi(os.Getenv("FYNE_TICK_RATE")); err == nil && v > 0 {
-		tickRate = v
+	if fyne.InitialTickRate > 0 {
+		tickRate = fyne.InitialTickRate
 	}
-	eventTick := time.NewTicker(time.Second / time.Duration(tickRate))
+	d.eventTick = time.NewTicker(time.Second / time.Duration(tickRate))
+	fyne.SetRenderTickRate = d.SetTickRate
 	for {
 		select {
 		case <-d.done:
-			eventTick.Stop()
+			d.eventTick.Stop()
 			d.Terminate()
 			l := fyne.CurrentApp().Lifecycle().(*app.Lifecycle)
 			if f := l.OnStopped(); f != nil {
@@ -156,7 +155,7 @@ func (d *gLDriver) runGL() {
 			if f.done != nil {
 				f.done <- struct{}{}
 			}
-		case <-eventTick.C:
+		case <-d.eventTick.C:
 			d.pollEvents()
 			for i := 0; i < len(d.windows); i++ {
 				w := d.windows[i].(*window)

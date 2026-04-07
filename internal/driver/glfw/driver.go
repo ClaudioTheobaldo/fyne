@@ -7,6 +7,7 @@ import (
 	"image"
 	"os"
 	"runtime"
+	"time"
 
 	"fyne.io/fyne/v2/internal/async"
 	"github.com/fyne-io/image/ico"
@@ -39,7 +40,8 @@ type gLDriver struct {
 	trayStart, trayStop func()     // shut down the system tray, if used
 	systrayMenu         *fyne.Menu // cache the menu set so we know when to refresh
 
-	aaMode aa.Mode // active anti-aliasing mode for MSAA window hints
+	aaMode    aa.Mode        // active anti-aliasing mode for MSAA window hints
+	eventTick *time.Ticker   // render loop ticker; reset via SetTickRate
 }
 
 // msaaSamples returns the MSAA sample count requested by the current AA mode.
@@ -47,6 +49,16 @@ func (d *gLDriver) msaaSamples() int { return d.aaMode.Samples() }
 
 // SetAntiAliasingMode sets the driver-wide AA mode used for new windows.
 func (d *gLDriver) SetAntiAliasingMode(mode aa.Mode) { d.aaMode = mode }
+
+// SetTickRate changes the render loop frame rate at runtime.
+// rate is in Hz and must be greater than zero.
+// Safe to call from any goroutine once the application loop has started.
+func (d *gLDriver) SetTickRate(rate int) {
+	if rate <= 0 || d.eventTick == nil {
+		return
+	}
+	d.eventTick.Reset(time.Second / time.Duration(rate))
+}
 
 func (d *gLDriver) init() {
 	if !d.initialized {
