@@ -205,7 +205,7 @@ type StreamingImage struct {
 	mu           sync.Mutex
 	pendingFrame *image.RGBA
 	pendingRaw   *RawFrame
-	texWidth     int
+	texWidth int
 	texHeight    int
 }
 
