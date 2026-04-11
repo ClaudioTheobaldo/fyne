@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"AssertRendersToImage\\\\|AssertObjectRendersToMarkup\" /c/Users/Claudio/Documents/Libraries/fyne/test/*.go)",
+      "Bash(grep -n \"effectList\\\\|EffectList\" /c/Users/Claudio/Documents/Libraries/fyne/canvas/*.go)",
+      "Bash(grep -n \"type effectHolder\\\\|func.*drawObjectWithEffects\" /c/Users/Claudio/Documents/Libraries/fyne/internal/painter/gl/*.go)",
+      "Bash(grep -n \"p.polygonProgram\\\\|p.arcProgram\" /c/Users/Claudio/Documents/Libraries/fyne/internal/painter/gl/*.go)",
+      "Bash(grep -n \"vecRectCoords\\\\|vecSquareCoords\" /c/Users/Claudio/Documents/Libraries/fyne/internal/painter/gl/*.go)",
+      "Bash(xargs grep:*)"
+    ]
+  }
+}
