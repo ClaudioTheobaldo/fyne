@@ -72,9 +72,10 @@ func RenderEffectOffscreen(src *image.RGBA, fragSrc string, uniforms map[string]
 	}
 	defer gl.DeleteProgram(prog)
 
-	// Source texture. Upload rows bottom-first so that, combined with the
-	// bottom-first readback below, a passthrough shader is the identity.
-	srcTex := uploadFlippedRGBA(src)
+	// Source texture, uploaded as-is (row 0 = top). The quad maps source row 0 to
+	// the framebuffer bottom and GL reads back bottom-first, so the two cancel:
+	// sampling and readback are both upright and match the CPU reference model.
+	srcTex := uploadSourceTexture(src)
 	defer gl.DeleteTextures(1, &srcTex)
 
 	// Output FBO + colour texture.
@@ -143,26 +144,23 @@ func RenderEffectOffscreen(src *image.RGBA, fragSrc string, uniforms map[string]
 	pix := make([]byte, outW*outH*4)
 	gl.ReadPixels(0, 0, int32(outW), int32(outH), gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pix))
 
-	// ReadPixels is bottom-first; flip to a top-first image.
+	// No flip on readback: the quad mapping + GL's bottom-first readback cancel,
+	// so straight-through copy yields an upright, model-matching image.
 	out = image.NewRGBA(image.Rect(0, 0, outW, outH))
-	row := outW * 4
-	for y := 0; y < outH; y++ {
-		copy(out.Pix[y*row:(y+1)*row], pix[(outH-1-y)*row:(outH-y)*row])
-	}
+	copy(out.Pix, pix)
 	return out, nil
 }
 
-// uploadFlippedRGBA uploads an RGBA image as a 2D texture with its rows reversed
-// (bottom-first), the standard GL convention so that upright sampling matches the
-// upright readback.
-func uploadFlippedRGBA(src *image.RGBA) uint32 {
+// uploadSourceTexture uploads an RGBA image as a 2D texture row 0 first (top),
+// packed tight (honouring the image stride / sub-image origin).
+func uploadSourceTexture(src *image.RGBA) uint32 {
 	w := src.Rect.Dx()
 	h := src.Rect.Dy()
-	flipped := make([]byte, w*h*4)
+	tight := make([]byte, w*h*4)
 	row := w * 4
 	for y := 0; y < h; y++ {
 		srcOff := src.PixOffset(src.Rect.Min.X, src.Rect.Min.Y+y)
-		copy(flipped[(h-1-y)*row:(h-y)*row], src.Pix[srcOff:srcOff+row])
+		copy(tight[y*row:(y+1)*row], src.Pix[srcOff:srcOff+row])
 	}
 	var tex uint32
 	gl.GenTextures(1, &tex)
@@ -171,7 +169,7 @@ func uploadFlippedRGBA(src *image.RGBA) uint32 {
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, int32(w), int32(h), 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(flipped))
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, int32(w), int32(h), 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(tight))
 	return tex
 }
 
