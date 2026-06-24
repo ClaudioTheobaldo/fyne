@@ -22,6 +22,10 @@ const (
 	//
 	// Since: 2.0
 	VariantLight = internaltheme.VariantLight
+
+	// VariantHighContrast is an accessibility-oriented high-contrast variant.
+	// The builtin theme has no palette for it; provide one in a custom theme.
+	VariantHighContrast = internaltheme.VariantHighContrast
 )
 
 var defaultTheme, systemTheme fyne.Theme

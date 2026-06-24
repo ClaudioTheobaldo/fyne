@@ -230,6 +230,11 @@ func (s *testSettings) ThemeVariant() fyne.ThemeVariant {
 	return 2 // not a preference
 }
 
+// SetThemeVariant is a no-op for test settings, which always report a neutral
+// variant. It exists to satisfy the fyne.Settings interface.
+func (s *testSettings) SetThemeVariant(fyne.ThemeVariant) {
+}
+
 func (s *testSettings) Scale() float32 {
 	s.propertyLock.RLock()
 	defer s.propertyLock.RUnlock()

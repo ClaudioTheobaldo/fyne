@@ -21,6 +21,9 @@ type Settings interface {
 	//
 	// Since: 2.0
 	ThemeVariant() ThemeVariant
+	// SetThemeVariant explicitly selects the active theme variant and prevents the
+	// operating system's light/dark preference from overriding it.
+	SetThemeVariant(ThemeVariant)
 	Scale() float32
 	// PrimaryColor indicates a user preference for a named primary color
 	//

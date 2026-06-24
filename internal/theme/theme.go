@@ -23,6 +23,11 @@ const (
 	VariantDark fyne.ThemeVariant = iota
 	VariantLight
 	VariantNameUserPreference // locally used in builtinTheme for backward compatibility
+
+	// VariantHighContrast is an accessibility-oriented high-contrast variant.
+	// The builtin theme does not provide a palette for it; it is intended for
+	// custom themes. The public alias lives in /theme/theme.go.
+	VariantHighContrast
 )
 
 var (
