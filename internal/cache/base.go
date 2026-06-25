@@ -78,10 +78,16 @@ func CleanCanvas(canvas fyne.Canvas) {
 	})
 }
 
-// ResetThemeCaches clears all the svg and text size cache maps
+// ResetThemeCaches clears all the svg, text size and rendered-text texture cache maps
 func ResetThemeCaches() {
 	svgs.Clear()
 	fontSizeCache.Clear()
+
+	// Rendered text textures are keyed on their resolved color. When a theme
+	// resolves colors lazily (e.g. via dynamic theme-token colors), the key does
+	// not change across a variant switch, so the cached glyph textures must be
+	// dropped explicitly or stale-colored text would persist after the change.
+	textTextures.Clear()
 }
 
 // destroyExpiredCanvases deletes objects from the canvases cache.

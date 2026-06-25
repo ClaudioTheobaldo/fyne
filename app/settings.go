@@ -31,9 +31,10 @@ func (sc *SettingsSchema) StoragePath() string {
 var _ fyne.Settings = (*settings)(nil)
 
 type settings struct {
-	theme          fyne.Theme
-	themeSpecified bool
-	variant        fyne.ThemeVariant
+	theme            fyne.Theme
+	themeSpecified   bool
+	variant          fyne.ThemeVariant
+	variantSpecified bool
 
 	listeners       []func(fyne.Settings)
 	changeListeners async.Map[chan fyne.Settings, bool]
@@ -78,6 +79,14 @@ func (s *settings) ShowAnimations() bool {
 
 func (s *settings) ThemeVariant() fyne.ThemeVariant {
 	return s.variant
+}
+
+// SetThemeVariant explicitly selects the theme variant (e.g. light, dark or a
+// custom variant) and marks it as user-specified so it is not overridden by the
+// operating system's light/dark preference. See setupTheme for the guard.
+func (s *settings) SetThemeVariant(variant fyne.ThemeVariant) {
+	s.variantSpecified = true
+	s.applyTheme(s.theme, variant)
 }
 
 func (s *settings) applyTheme(theme fyne.Theme, variant fyne.ThemeVariant) {
@@ -138,6 +147,13 @@ func (s *settings) setupTheme() {
 		variant = theme.VariantLight
 	case "dark":
 		variant = theme.VariantDark
+	}
+
+	// An explicitly set variant (via SetThemeVariant) always wins over the OS
+	// preference and the persisted theme name, so a system light/dark toggle
+	// does not clobber the user's choice.
+	if s.variantSpecified {
+		variant = s.variant
 	}
 
 	s.applyTheme(effectiveTheme, variant)
