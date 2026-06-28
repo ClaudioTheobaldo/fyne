@@ -271,6 +271,18 @@ func (w *window) processMoved(x, y int) {
 		w.xpos, w.ypos = x, y
 	}
 
+	// On Windows a title-bar drag runs a modal move loop inside the OS; while it spins,
+	// the normal run-loop draw is blocked and only GLFW callbacks fire, so live content
+	// (e.g. playing video) freezes until the drag ends. Resizing already repaints via the
+	// WM_PAINT refresh path; mirror that for moves by painting DIRECTLY here (SetDirty
+	// alone wouldn't help — the run loop can't drain the dirty flag mid-drag). Other
+	// platforms keep their run loop during a move, so this is Windows-only.
+	if runtime.GOOS == "windows" && w.visible && !w.isClosing() {
+		w.RunWithContext(func() {
+			w.driver.repaintWindow(w)
+		})
+	}
+
 	if w.canvas.detectedScale == w.detectScale() {
 		return
 	}
