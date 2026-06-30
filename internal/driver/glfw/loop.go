@@ -192,6 +192,7 @@ func (d *gLDriver) runGL() {
 
 func (d *gLDriver) destroyWindow(w *window, index int) {
 	w.visible = false
+	w.uninstallSizeMoveRepaint() // restore GLFW's WndProc while the HWND is still valid
 	w.viewport.Destroy()
 	w.destroy(d)
 
