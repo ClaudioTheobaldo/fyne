@@ -39,7 +39,10 @@ var (
 
 type sizeMoveSub struct {
 	orig    uintptr // GLFW's original WndProc, to chain unhandled messages
-	repaint func()  // repaint this window now (main thread)
+	win     *window // the subclassed window (to track its live size while dragging)
+	repaint func()  // repaint all live windows now (main thread)
+	lastW   int     // last window size we relaid out at, to skip no-op resizes
+	lastH   int
 }
 
 // sizeMoveWndProc is the subclassed window procedure. It drives a repaint timer across the
@@ -61,12 +64,33 @@ func sizeMoveWndProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		procKillTimer.Call(hwnd, sizeMoveTimerID)
 	case wmTimer:
 		if wparam == sizeMoveTimerID {
+			sub.relayoutIfResized() // track the border live during a resize drag
 			sub.repaint()
 		}
 	}
 
 	r, _, _ := procCallWindowProc.Call(sub.orig, hwnd, msg, wparam, lparam)
 	return r
+}
+
+// relayoutIfResized makes content track the window border live during a resize drag. The
+// Win32 modal loop blocks the run loop, and GLFW's WM_SIZE relayout doesn't reliably reach
+// the canvas mid-loop, so without this the content keeps painting at the pre-drag layout and
+// only snaps to the new size on release. We poll the live window size each timer tick and, if
+// it changed, run the exact same processResized the normal size path uses (canvas resize +
+// relayout) before the repaint. No-op for a pure move (size unchanged) and for windows other
+// than the one being dragged. Runs on the main thread (inside the modal loop).
+func (s *sizeMoveSub) relayoutIfResized() {
+	w := s.win
+	if w == nil || w.viewport == nil || !w.visible || w.isClosing() {
+		return
+	}
+	width, height := w.viewport.GetSize()
+	if width == 0 || height == 0 || (width == s.lastW && height == s.lastH) {
+		return
+	}
+	s.lastW, s.lastH = width, height
+	w.processResized(width, height)
 }
 
 // repaintAllDuringModalLoop force-paints every visible window. The Win32 modal move/size
@@ -105,9 +129,13 @@ func (w *window) installSizeMoveRepaint() {
 		return
 	}
 	sizeMoveMu.Lock()
+	width, height := w.viewport.GetSize()
 	sizeMoveState[hwnd] = &sizeMoveSub{
 		orig:    orig,
+		win:     w,
 		repaint: w.driver.repaintAllDuringModalLoop,
+		lastW:   width,
+		lastH:   height,
 	}
 	sizeMoveMu.Unlock()
 }
