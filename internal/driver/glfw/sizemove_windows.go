@@ -69,6 +69,27 @@ func sizeMoveWndProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 	return r
 }
 
+// repaintAllDuringModalLoop force-paints every visible window. The Win32 modal move/size
+// loop runs on the shared main thread, so dragging ANY window blocks the run loop and stops
+// ALL windows from drawing (most visibly: video in the main window freezes while a secondary
+// window is dragged). We therefore repaint every window on each timer tick, not just the one
+// being dragged. repaintWindow paints unconditionally (unlike drawSingleFrame, which is
+// dirty-gated and would skip windows whose dirty flag never got set because their fyne.Do
+// refresh is queued behind the blocked loop). Safe to read d.windows without a lock here: the
+// run loop and window add/remove all run on this same main thread, which is parked inside the
+// modal loop while this fires.
+func (d *gLDriver) repaintAllDuringModalLoop() {
+	for _, win := range d.windowList() {
+		w, ok := win.(*window)
+		if !ok || w.viewport == nil || !w.visible || w.isClosing() {
+			continue
+		}
+		w.RunWithContext(func() {
+			d.repaintWindow(w)
+		})
+	}
+}
+
 // installSizeMoveRepaint subclasses the GLFW window so live content keeps painting during a
 // move/resize drag. No-op if the native handle isn't available.
 func (w *window) installSizeMoveRepaint() {
@@ -85,14 +106,8 @@ func (w *window) installSizeMoveRepaint() {
 	}
 	sizeMoveMu.Lock()
 	sizeMoveState[hwnd] = &sizeMoveSub{
-		orig: orig,
-		repaint: func() {
-			if w.visible && !w.isClosing() {
-				w.RunWithContext(func() {
-					w.driver.repaintWindow(w)
-				})
-			}
-		},
+		orig:    orig,
+		repaint: w.driver.repaintAllDuringModalLoop,
 	}
 	sizeMoveMu.Unlock()
 }
