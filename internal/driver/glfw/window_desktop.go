@@ -791,6 +791,7 @@ func (w *window) create() {
 	win.SetKeyCallback(w.keyPressed)
 	win.SetCharCallback(w.charInput)
 	win.SetFocusCallback(w.focused)
+	w.installSizeMoveRepaint() // keep live content painting during a move/resize drag (Windows)
 
 	w.canvas.detectedScale = w.detectScale()
 	w.canvas.scale = w.calculatedScale()
