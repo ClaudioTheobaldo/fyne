@@ -43,11 +43,19 @@ func runOnMain(f func()) {
 // on each modal-loop timer tick keeps every window's content live during a drag. Must be called
 // on the main thread (which is where the modal loop runs), so there is no concurrent receiver.
 func drainMainFuncQueue() int {
+	if drained.Load() {
+		return 0 // app is shutting down; the run loop owns draining + closing the queue
+	}
 	n := 0
 	for {
 		select {
-		case f := <-funcQueue.Out():
-			f.f()
+		case f, ok := <-funcQueue.Out():
+			if !ok {
+				return n // queue closed underneath us (shutdown) — stop
+			}
+			if f.f != nil {
+				f.f()
+			}
 			if f.done != nil {
 				f.done <- struct{}{}
 			}
