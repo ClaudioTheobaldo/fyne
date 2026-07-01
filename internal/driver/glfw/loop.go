@@ -36,6 +36,28 @@ func runOnMain(f func()) {
 	runOnMainWithWait(f, true)
 }
 
+// drainMainFuncQueue runs every currently-queued main-thread function, without blocking. The
+// run loop normally services this queue (see runGL's select), but a Win32 modal move/size loop
+// spins inside the OS and blocks the run loop — so queued UI work (new video frames, Refresh,
+// dirty-marking) never applies and content freezes even while we keep repainting. Draining it
+// on each modal-loop timer tick keeps every window's content live during a drag. Must be called
+// on the main thread (which is where the modal loop runs), so there is no concurrent receiver.
+func drainMainFuncQueue() int {
+	n := 0
+	for {
+		select {
+		case f := <-funcQueue.Out():
+			f.f()
+			if f.done != nil {
+				f.done <- struct{}{}
+			}
+			n++
+		default:
+			return n
+		}
+	}
+}
+
 // force a function f to run on the main thread and specify if we should wait for it to return
 func runOnMainWithWait(f func(), wait bool) {
 	// If we are on main before app run just execute - otherwise add it to the main queue and wait.
