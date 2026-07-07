@@ -379,6 +379,16 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 
 	p.ensureFBOSize(w, h)
 
+	// If this object sits inside a clip region (e.g. a Scrollable), a GL scissor
+	// is currently enabled in WINDOW coordinates. The offscreen passes below draw
+	// into FBOs with a (0,0)-origin viewport, so that window-space scissor rect
+	// would fall entirely outside the FBO and clip the whole render away (black
+	// output). Disable it for the offscreen work and restore it for the on-screen
+	// composite (Step 3), which DOES want to be clipped to the tile.
+	if p.clipEnabled {
+		p.ctx.Disable(scissorTest)
+	}
+
 	// Save viewport state
 	// (Fyne's viewport is set once per frame, we restore it after)
 
@@ -486,6 +496,11 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 	}
 
 	// Step 3: Composite final result to screen
+	// Restore the clip scissor (disabled above) so the effect output is clipped to
+	// the tile just like the un-effected object would have been.
+	if p.clipEnabled {
+		p.ctx.Enable(scissorTest)
+	}
 	p.ctx.BindFramebuffer(glFramebuffer, noFramebuffer)
 
 	// Restore viewport to full frame

@@ -71,6 +71,7 @@ type painter struct {
 	shaderCache           map[string]*ProgramState // cached user shader programs keyed by fragment source
 	effectPipe            effectPipeline           // FBO-based effect rendering pipeline
 	aaMode            aa.Mode              // active anti-aliasing technique
+	clipEnabled       bool                 // true while a scissor clip is active (StartClipping..StopClipping)
 }
 
 type ProgramState struct {
@@ -196,11 +197,13 @@ func (p *painter) StartClipping(pos fyne.Position, size fyne.Size) {
 	h := p.textureScale(size.Height)
 	p.ctx.Scissor(int32(x), int32(y), int32(w), int32(h))
 	p.ctx.Enable(scissorTest)
+	p.clipEnabled = true
 	p.logError()
 }
 
 func (p *painter) StopClipping() {
 	p.ctx.Disable(scissorTest)
+	p.clipEnabled = false
 	p.logError()
 }
 
