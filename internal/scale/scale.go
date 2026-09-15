@@ -23,6 +23,26 @@ func ToFyneCoordinate(c fyne.Canvas, v int) float32 {
 	}
 }
 
+// ToFyneCoordinateFloat converts a sub-pixel screen coordinate to a fyne coordinate.
+//
+// Pointer positions arrive from the windowing system as floats with sub-pixel precision.
+// Truncating them to int before dividing by the scale (as ToFyneCoordinate's signature
+// forces) throws that precision away and biases every sample downwards -- and, because
+// int() truncates towards zero rather than flooring, the bias flips sign for windows
+// positioned left of or above the primary monitor. At a scale of 1.5 that is most of a
+// logical pixel of error on every mouse event, which is enough to miss the edge of a
+// small control.
+func ToFyneCoordinateFloat(c fyne.Canvas, v float64) float32 {
+	switch c.Scale() {
+	case 0.0:
+		panic("Incorrect scale most likely not set.")
+	case 1.0:
+		return float32(v)
+	default:
+		return float32(v / float64(c.Scale()))
+	}
+}
+
 // ToFyneSize returns the scaled size of an object based on pixel coordinates, typically for images.
 // This method will attempt to find the canvas for an object to get its scale.
 // In the event that this fails it will assume a 1:1 mapping (scale=1 or low DPI display).

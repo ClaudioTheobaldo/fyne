@@ -341,12 +341,32 @@ func (w *window) resized(_ *glfw.Window, width, height int) {
 }
 
 func (w *window) scaled(_ *glfw.Window, x float32, y float32) {
-	if !build.IsWayland { // other platforms handle this using older APIs
+	if build.IsWayland {
+		w.canvas.texScale = x
+		w.canvas.Refresh(w.canvas.content)
 		return
 	}
 
-	w.canvas.texScale = x
-	w.canvas.Refresh(w.canvas.content)
+	// Windows is per-monitor-v2 DPI aware (GLFW sets that during init), so this callback
+	// is our WM_DPICHANGED: it fires when the display scale changes or the window moves
+	// to a monitor with a different scale. Without handling it the canvas keeps the scale
+	// it was created with, and every size and hit-test stays wrong until restart.
+	//
+	// The moved() fallback cannot cover this: it gates on detectScale(), the physical-size
+	// heuristic, while the Windows scale actually comes from GetContentScale() via
+	// SystemScaleForWindow. Two monitors with the same physical DPI but different Windows
+	// scaling settings therefore look identical to that gate.
+	//
+	// Other platforms keep using the older size/move driven paths.
+	if runtime.GOOS != "windows" {
+		return
+	}
+
+	if w.canvas.scale == w.calculatedScale() {
+		return
+	}
+
+	w.canvas.reloadScale()
 }
 
 func (w *window) frameSized(_ *glfw.Window, width, height int) {
@@ -744,6 +764,20 @@ func (w *window) create() {
 	}
 	glfw.WindowHint(glfw.AutoIconify, glfw.False)
 	initWindowHints(w.driver.msaaSamples())
+
+	// screenSize below converts logical units to pixels using w.canvas.scale, but the real
+	// scale is only known once the window exists (it comes from the viewport's content
+	// scale). Seeding it from the monitor we are about to open on stops the window being
+	// created at scale 1.0 and corrected afterwards -- a mismatch that leaves the initial
+	// size, the size limits handed to GLFW and hit-testing disagreeing until something
+	// forces a resize (which is why minimise/restore used to "fix" a mis-scaled window).
+	if runtime.GOOS == "windows" {
+		if monitor := glfw.GetPrimaryMonitor(); monitor != nil {
+			if xScale, _ := monitor.GetContentScale(); xScale > 0 {
+				w.canvas.scale = calculateScale(userScale(), xScale, 1)
+			}
+		}
+	}
 
 	pixWidth, pixHeight := w.screenSize(w.canvas.size)
 	pixWidth = int(fyne.Max(float32(pixWidth), float32(w.width)))

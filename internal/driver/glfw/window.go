@@ -337,7 +337,7 @@ func (w *window) findObjectAtPositionMatching(canvas *glCanvas, mouse fyne.Posit
 
 func (w *window) processMouseMoved(xpos float64, ypos float64) {
 	previousPos := w.mousePos
-	w.mousePos = fyne.NewPos(scale.ToFyneCoordinate(w.canvas, int(xpos)), scale.ToFyneCoordinate(w.canvas, int(ypos)))
+	w.mousePos = fyne.NewPos(scale.ToFyneCoordinateFloat(w.canvas, xpos), scale.ToFyneCoordinateFloat(w.canvas, ypos))
 	mousePos := w.mousePos
 	mouseButton := w.mouseButton
 	mouseDragPos := w.mouseDragPos
@@ -465,7 +465,7 @@ func (w *window) processMouseClicked(button desktop.MouseButton, action action, 
 	mouseDragStarted := w.mouseDragStarted
 	if mousePos.IsZero() { // window may not be focused (darwin mostly) and so position callbacks not happening
 		xpos, ypos := w.view().GetCursorPos()
-		w.mousePos = fyne.NewPos(scale.ToFyneCoordinate(w.canvas, int(xpos)), scale.ToFyneCoordinate(w.canvas, int(ypos)))
+		w.mousePos = fyne.NewPos(scale.ToFyneCoordinateFloat(w.canvas, xpos), scale.ToFyneCoordinateFloat(w.canvas, ypos))
 		mousePos = w.mousePos
 	}
 
