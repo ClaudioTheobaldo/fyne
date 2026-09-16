@@ -253,7 +253,13 @@ func (p *painter) createProgram(shaderFilename string) Program {
 	p.ctx.LinkProgram(prog)
 
 	info := p.ctx.GetProgramInfoLog(prog)
-	if p.ctx.GetProgrami(prog, linkStatus) == glFalse {
+	linkOK := p.ctx.GetProgrami(prog, linkStatus) != glFalse
+
+	// The linked program owns its compiled code; release the shader objects.
+	p.ctx.DeleteShader(vertShader)
+	p.ctx.DeleteShader(fragShader)
+
+	if !linkOK {
 		panic(fmt.Errorf("failed to link OpenGL program:\n%s", info))
 	}
 
@@ -302,7 +308,13 @@ func (p *painter) getOrCompileShaderProgram(fragSrc string) *ProgramState {
 	p.ctx.AttachShader(prog, fragShader)
 	p.ctx.LinkProgram(prog)
 
-	if p.ctx.GetProgrami(prog, linkStatus) == glFalse {
+	linkOK := p.ctx.GetProgrami(prog, linkStatus) != glFalse
+
+	// The linked program owns its compiled code; release the shader objects.
+	p.ctx.DeleteShader(vertShader)
+	p.ctx.DeleteShader(fragShader)
+
+	if !linkOK {
 		info := p.ctx.GetProgramInfoLog(prog)
 		fyne.LogError("ShaderRect: failed to link program", fmt.Errorf("%s", info))
 		return nil

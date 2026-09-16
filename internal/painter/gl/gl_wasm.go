@@ -191,6 +191,10 @@ func (c *xjsContext) AttachShader(program Program, shader Shader) {
 	gl.AttachShader(gl.Program(program), gl.Shader(shader))
 }
 
+func (c *xjsContext) DeleteShader(shader Shader) {
+	gl.DeleteShader(gl.Shader(shader))
+}
+
 func (c *xjsContext) BindBuffer(target uint32, buf Buffer) {
 	gl.BindBuffer(gl.Enum(target), gl.Buffer(buf))
 }

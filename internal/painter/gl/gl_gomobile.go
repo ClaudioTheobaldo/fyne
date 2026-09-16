@@ -214,6 +214,10 @@ func (c *mobileContext) AttachShader(program Program, shader Shader) {
 	c.glContext.AttachShader(gl.Program(program), gl.Shader(shader))
 }
 
+func (c *mobileContext) DeleteShader(shader Shader) {
+	c.glContext.DeleteShader(gl.Shader(shader))
+}
+
 func (c *mobileContext) BindBuffer(target uint32, buf Buffer) {
 	c.glContext.BindBuffer(gl.Enum(target), gl.Buffer(buf))
 }

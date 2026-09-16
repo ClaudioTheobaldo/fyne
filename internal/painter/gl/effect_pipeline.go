@@ -63,7 +63,14 @@ func (p *painter) initEffectPipeline() {
 	p.ctx.AttachShader(prog, fragShader)
 	p.ctx.LinkProgram(prog)
 
-	if p.ctx.GetProgrami(prog, linkStatus) == glFalse {
+	linkOK := p.ctx.GetProgrami(prog, linkStatus) != glFalse
+
+	// The program owns its compiled code after linking; release the shader
+	// objects so they are not held for the process lifetime.
+	p.ctx.DeleteShader(vertShader)
+	p.ctx.DeleteShader(fragShader)
+
+	if !linkOK {
 		info := p.ctx.GetProgramInfoLog(prog)
 		fyne.LogError("EffectPipeline: failed to link passthrough program", fmt.Errorf("%s", info))
 		return
@@ -264,7 +271,17 @@ func (p *painter) compileEffectProgram(fragSrc string) *ProgramState {
 	p.ctx.AttachShader(prog, fragShader)
 	p.ctx.LinkProgram(prog)
 
-	if p.ctx.GetProgrami(prog, linkStatus) == glFalse {
+	linkOK := p.ctx.GetProgrami(prog, linkStatus) != glFalse
+
+	// The linked program keeps its own copy of the compiled code, so the shader
+	// objects are dead weight from here on. Deleting them flags them for removal;
+	// the driver frees each once it is no longer attached to a live program.
+	// Without this every compile left two shader objects allocated for the
+	// lifetime of the process.
+	p.ctx.DeleteShader(vertShader)
+	p.ctx.DeleteShader(fragShader)
+
+	if !linkOK {
 		info := p.ctx.GetProgramInfoLog(prog)
 		fyne.LogError("EffectPipeline: failed to link effect program", fmt.Errorf("%s", info))
 		return nil

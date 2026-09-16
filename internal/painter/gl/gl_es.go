@@ -314,6 +314,10 @@ func (c *esContext) AttachShader(program Program, shader Shader) {
 	gl.AttachShader(uint32(program), uint32(shader))
 }
 
+func (c *esContext) DeleteShader(shader Shader) {
+	gl.DeleteShader(uint32(shader))
+}
+
 func (c *esContext) BindBuffer(target uint32, buf Buffer) {
 	gl.BindBuffer(target, uint32(buf))
 }
