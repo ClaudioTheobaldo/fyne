@@ -303,6 +303,20 @@ func (e *Effect) Uniforms() map[string]any {
 	return out
 }
 
+// RangeUniforms calls fn for each uniform without allocating a snapshot map.
+// The painter reads every uniform on every pass of every frame, so Uniforms'
+// defensive copy shows up as steady allocation churn there; fn must not call
+// back into the effect, as the read lock is held for the duration.
+//
+// Since: 2.8
+func (e *Effect) RangeUniforms(fn func(name string, value any)) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	for k, v := range e.uniforms {
+		fn(k, v)
+	}
+}
+
 // CustomShaderSrc returns the fragment shader source for Custom effects.
 func (e *Effect) CustomShaderSrc() string {
 	return e.customShaderSrc

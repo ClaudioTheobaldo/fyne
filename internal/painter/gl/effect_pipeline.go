@@ -444,6 +444,15 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 	texelW := 1.0 / resW
 	texelH := 1.0 / resH
 
+	// Viewport, clear colour, blend mode and the quad VBO are identical for
+	// every pass, so set them once here rather than per pass. The quad's
+	// contents never change after init, so re-uploading it each pass was a
+	// full glBufferData reallocation of static data.
+	p.ctx.Viewport(0, 0, w, h)
+	p.ctx.ClearColor(0, 0, 0, 0)
+	p.ctx.BlendFunc(srcAlpha, oneMinusSrcAlpha)
+	p.ctx.BindBuffer(arrayBuffer, ep.quadBuf)
+
 	for _, eff := range active {
 		ps := p.getEffectProgram(eff)
 		passes := effect.PassCount(eff.Type())
@@ -455,8 +464,6 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 			}
 
 			p.ctx.BindFramebuffer(glFramebuffer, dstFBO)
-			p.ctx.Viewport(0, 0, w, h)
-			p.ctx.ClearColor(0, 0, 0, 0)
 			p.ctx.Clear(bitColorBuffer)
 
 			p.ctx.UseProgram(ps.ref)
@@ -466,7 +473,9 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 			p.ctx.BindTexture(texture2D, srcTex)
 
 			// Standard uniforms
-			p.SetUniform1f(*ps, "tex", 0) // sampler — will be ignored if it's not a float uniform, but Uniform1i is needed
+			// tex is a sampler: it takes Uniform1i. Setting it through
+			// SetUniform1f would also poison that uniform's cached previous
+			// value, defeating the redundant-upload check for it.
 			if u, ok := ps.uniforms["tex"]; ok {
 				p.ctx.Uniform1i(u.ref, 0)
 			}
@@ -483,8 +492,10 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 			}
 
 			// Set effect-specific uniforms from the Effect's uniform map
-			uniforms := eff.Uniforms()
-			for name, val := range uniforms {
+			// RangeUniforms rather than Uniforms: this runs for every pass of
+			// every effect of every frame, and Uniforms allocates a fresh map
+			// each call.
+			eff.RangeUniforms(func(name string, val any) {
 				switch v := val.(type) {
 				case float32:
 					p.SetUniform1f(*ps, name, v)
@@ -495,14 +506,13 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 				case [4]float32:
 					p.SetUniform4f(*ps, name, v[0], v[1], v[2], v[3])
 				}
-			}
+			})
 
-			// Draw fullscreen quad
-			p.updateBuffer(ep.quadBuf, effectQuadVerts)
+			// Draw fullscreen quad. The VBO is already bound and filled; only
+			// the attribute pointers need rebinding, since they are program state.
 			p.UpdateVertexArray(*ps, "vert", 2, 4, 0)
 			p.UpdateVertexArray(*ps, "vertTexCoord", 2, 4, 2)
 
-			p.ctx.BlendFunc(srcAlpha, oneMinusSrcAlpha)
 			p.ctx.DrawArrays(triangleStrip, 0, 4)
 			p.logError()
 
