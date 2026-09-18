@@ -448,6 +448,15 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 	// every pass, so set them once here rather than per pass. The quad's
 	// contents never change after init, so re-uploading it each pass was a
 	// full glBufferData reallocation of static data.
+	//
+	// The blend mode is deliberately left as src-alpha over the transparent
+	// clear. For a source with partial alpha that multiplies RGB by alpha once
+	// per pass, which compounds across a chain — switching to no blending, or
+	// dropping the per-pass clear, would avoid it and save a full-tile clear
+	// per pass. It is not done here because the change is only safe to judge
+	// against a translucent source: the effect chain is also used by widgets
+	// whose antialiased edges carry real partial alpha, and there is no
+	// coverage for those. Left as-is deliberately rather than overlooked.
 	p.ctx.Viewport(0, 0, w, h)
 	p.ctx.ClearColor(0, 0, 0, 0)
 	p.ctx.BlendFunc(srcAlpha, oneMinusSrcAlpha)
