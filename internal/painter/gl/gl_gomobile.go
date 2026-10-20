@@ -328,6 +328,11 @@ func (c *mobileContext) GetUniformLocation(program Program, name string) Uniform
 	return Uniform(c.glContext.GetUniformLocation(gl.Program(program), name))
 }
 
+// uniformFound reports whether GetUniformLocation found the uniform.
+func uniformFound(u Uniform) bool {
+	return u.Value >= 0
+}
+
 func (c *mobileContext) MapBuffer(target, access uint32) unsafe.Pointer {
 	return nil // PBOs not supported on mobile
 }

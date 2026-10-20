@@ -443,6 +443,11 @@ func (c *esContext) GetUniformLocation(program Program, name string) Uniform {
 	return Uniform(gl.GetUniformLocation(uint32(program), gl.Str(name+"\x00")))
 }
 
+// uniformFound reports whether GetUniformLocation found the uniform.
+func uniformFound(u Uniform) bool {
+	return u >= 0
+}
+
 func (c *esContext) LinkProgram(program Program) {
 	gl.LinkProgram(uint32(program))
 }

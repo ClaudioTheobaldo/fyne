@@ -517,7 +517,7 @@ func (w *window) RescaleContext() {
 
 func (w *window) create() {
 	// we can't hide the window in webgl, so there might be some artifact
-	initWindowHints()
+	initWindowHints(w.driver.msaaSamples())
 
 	pixWidth, pixHeight := w.screenSize(w.canvas.size)
 	pixWidth = int(fyne.Max(float32(pixWidth), float32(w.width)))

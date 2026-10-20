@@ -360,7 +360,7 @@ func (c *xjsContext) UnmapBuffer(target uint32) bool {
 }
 
 func (c *xjsContext) PixelStorei(pname uint32, param int32) {
-	gl.PixelStorei(gl.Enum(pname), int(param))
+	gl.PixelStorei(gl.Enum(pname), param)
 }
 
 func (c *xjsContext) Uniform1i(uniform Uniform, v int32) {
@@ -413,10 +413,6 @@ func (c *xjsContext) FramebufferTexture2D(target, attachment, textarget uint32, 
 
 func (c *xjsContext) CheckFramebufferStatus(target uint32) uint32 {
 	return uint32(gl.CheckFramebufferStatus(gl.Enum(target)))
-}
-
-func (c *xjsContext) Uniform3f(uniform Uniform, v0, v1, v2 float32) {
-	gl.Uniform3f(gl.Uniform(uniform), v0, v1, v2)
 }
 
 func (c *xjsContext) UniformMatrix3fv(uniform Uniform, transpose bool, value [9]float32) {

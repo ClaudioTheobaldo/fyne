@@ -338,7 +338,7 @@ func (p *painter) getOrCompileShaderProgram(fragSrc string) *ProgramState {
 	}
 	for _, name := range standardUniforms {
 		loc := p.ctx.GetUniformLocation(prog, name)
-		if loc >= 0 {
+		if uniformFound(loc) {
 			ps.uniforms[name] = &UniformState{ref: loc}
 		}
 	}
@@ -362,7 +362,7 @@ func (p *painter) discoverCustomUniforms(ps *ProgramState, prog Program, uniform
 			continue // already known
 		}
 		loc := p.ctx.GetUniformLocation(prog, name)
-		if loc >= 0 {
+		if uniformFound(loc) {
 			ps.uniforms[name] = &UniformState{ref: loc}
 		}
 	}
