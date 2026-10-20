@@ -178,7 +178,7 @@ func (w *window) doCenterOnScreen() {
 }
 
 func (w *window) RequestFocus() {
-	if build.IsWayland || w.view() == nil {
+	if build.IsWayland || w.view() == nil || noFocusOnShow() {
 		return
 	}
 
@@ -763,6 +763,11 @@ func (w *window) create() {
 		glfw.WindowHint(glfw.Resizable, glfw.True)
 	}
 	glfw.WindowHint(glfw.AutoIconify, glfw.False)
+	if noFocusOnShow() {
+		glfw.WindowHint(glfw.FocusOnShow, glfw.False)
+	} else {
+		glfw.WindowHint(glfw.FocusOnShow, glfw.True)
+	}
 	initWindowHints(w.driver.msaaSamples())
 
 	// screenSize below converts logical units to pixels using w.canvas.scale, but the real
@@ -856,4 +861,13 @@ func (w *window) view() *glfw.Window {
 // wrapInnerWindow is a no-op to match what the web driver provides
 func wrapInnerWindow(*container.InnerWindow, fyne.Window, *gLDriver) fyne.Window {
 	return nil
+}
+
+// noFocusOnShow reports whether FYNE_NO_FOCUS_ON_SHOW is set. Windows are then
+// shown without being activated and RequestFocus does nothing, so an app
+// started in the background (an automated test, typically) never takes the
+// keyboard focus away from what the user is doing. Input injected through
+// desktop.InputInjector does not need the window to be focused.
+func noFocusOnShow() bool {
+	return os.Getenv("FYNE_NO_FOCUS_ON_SHOW") != ""
 }
