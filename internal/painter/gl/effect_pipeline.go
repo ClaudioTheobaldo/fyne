@@ -3,6 +3,8 @@ package gl
 import (
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -15,6 +17,7 @@ type effectPipeline struct {
 	passthrough ProgramState                        // passthrough shader for compositing final result
 	progCache   map[effect.EffectType]*ProgramState // compiled effect shader programs
 	customCache map[string]*ProgramState            // compiled custom shader programs keyed by source
+	bilateral   map[int]*ProgramState               // BilateralBlur programs keyed by window radius
 	initialized bool
 
 	// Render targets, one set per object size in use. See targetsFor.
@@ -116,6 +119,7 @@ func (p *painter) initEffectPipeline() {
 
 	ep.progCache = make(map[effect.EffectType]*ProgramState)
 	ep.customCache = make(map[string]*ProgramState)
+	ep.bilateral = make(map[int]*ProgramState)
 	ep.initialized = true
 }
 
@@ -305,6 +309,9 @@ func (p *painter) getEffectProgram(eff *effect.Effect) *ProgramState {
 	}
 
 	kind := eff.Type()
+	if kind == effect.BilateralBlur {
+		return p.getBilateralProgram(eff)
+	}
 	if ps, ok := ep.progCache[kind]; ok {
 		return ps
 	}
@@ -319,6 +326,53 @@ func (p *painter) getEffectProgram(eff *effect.Effect) *ProgramState {
 		return &ep.passthrough
 	}
 	ep.progCache[kind] = ps
+	return ps
+}
+
+// bilateralMaxRadius matches the window the shader supported before it was
+// specialised per radius.
+const bilateralMaxRadius = 8
+
+// getBilateralProgram returns the BilateralBlur program whose loop covers
+// exactly ceil(radius) taps either side of the centre.
+//
+// The shader needs a constant loop bound, so a single program had to loop over
+// the largest window and mask out the unused taps; every pixel then paid the
+// loop overhead of a 17x17 window even at radius 1. Compiling one program per
+// whole-number radius (at most nine, built on first use) keeps the cost in
+// proportion to the strength. The radius is read on every draw, so a radius
+// changed in place with SetFloat picks up the right program too.
+func (p *painter) getBilateralProgram(eff *effect.Effect) *ProgramState {
+	ep := &p.effectPipe
+
+	var radius float32
+	if v, ok := eff.Uniform("radius").(float32); ok {
+		radius = v
+	}
+	r := int(math.Ceil(float64(radius)))
+	if r < 0 {
+		r = 0
+	} else if r > bilateralMaxRadius {
+		r = bilateralMaxRadius
+	}
+
+	if ps, ok := ep.bilateral[r]; ok {
+		return ps
+	}
+
+	const marker = "#define MAX_RADIUS 8"
+	src := string(effectShaderSource(effect.BilateralBlur))
+	if strings.Count(src, marker) != 1 {
+		fyne.LogError("EffectPipeline: bilateral shader must contain its radius define exactly once", nil)
+		return &ep.passthrough
+	}
+	src = strings.Replace(src, marker, "#define MAX_RADIUS "+strconv.Itoa(r), 1)
+
+	ps := p.compileEffectProgram(src)
+	if ps == nil {
+		return &ep.passthrough
+	}
+	ep.bilateral[r] = ps
 	return ps
 }
 
