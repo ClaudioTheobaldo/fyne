@@ -11,15 +11,25 @@ import (
 
 // effectPipeline manages the FBO ping-pong rendering pipeline for shader effects.
 type effectPipeline struct {
+	quadBuf     Buffer                              // fullscreen quad vertex buffer
+	passthrough ProgramState                        // passthrough shader for compositing final result
+	progCache   map[effect.EffectType]*ProgramState // compiled effect shader programs
+	customCache map[string]*ProgramState            // compiled custom shader programs keyed by source
+	initialized bool
+
+	// Render targets, one set per object size in use. See targetsFor.
+	targets    []*effectTargets
+	targetTick uint64 // bumped on every lookup; drives least-recently-used eviction
+}
+
+// effectTargets is the ping-pong FBO pair (plus optional MSAA buffer) for one
+// pixel size.
+type effectTargets struct {
 	fboA, fboB    Framebuffer
 	texA, texB    Texture
 	width, height int
-	quadBuf       Buffer                             // fullscreen quad vertex buffer
-	passthrough   ProgramState                       // passthrough shader for compositing final result
-	progCache     map[effect.EffectType]*ProgramState // compiled effect shader programs
-	customCache   map[string]*ProgramState            // compiled custom shader programs keyed by source
-	initialized   bool
-	allocated     bool // whether FBOs have been allocated (avoids struct comparison on WASM)
+	bytes         int    // approximate VRAM held, for the cache budget
+	lastUsed      uint64 // effectPipeline.targetTick at the last lookup
 
 	// MSAA support
 	msaaFBO     Framebuffer
@@ -27,13 +37,22 @@ type effectPipeline struct {
 	msaaSamples int
 }
 
+// Limits for the render target cache. A 2560x1440 pair is ~29 MB, so the byte
+// budget keeps one full-resolution video tile plus the small widget targets
+// resident, without letting several large sizes pile up. A single target larger
+// than the budget is still allowed; it just evicts everything else.
+const (
+	maxEffectTargets      = 4
+	maxEffectTargetsBytes = 64 << 20
+)
+
 // fullscreen quad: 2 triangles covering [-1,1] with matching UV [0,1]
 // Layout: x, y, u, v (4 floats per vertex, 4 vertices as triangle strip)
 var effectQuadVerts = []float32{
 	-1, -1, 0, 0, // bottom-left
-	1, -1, 1, 0,  // bottom-right
-	-1, 1, 0, 1,  // top-left
-	1, 1, 1, 1,   // top-right
+	1, -1, 1, 0, // bottom-right
+	-1, 1, 0, 1, // top-left
+	1, 1, 1, 1, // top-right
 }
 
 func (p *painter) initEffectPipeline() {
@@ -100,42 +119,98 @@ func (p *painter) initEffectPipeline() {
 	ep.initialized = true
 }
 
-// ensureFBOSize creates or resizes the two FBOs and their color textures.
-func (p *painter) ensureFBOSize(w, h int) {
+// targetsFor returns render targets of exactly w x h pixels, creating them if
+// needed.
+//
+// There is one pipeline per painter, shared by every object that has effects.
+// It used to hold a single FBO pair and reallocate it whenever the requested
+// size changed, so two differently-sized objects drawn in the same frame
+// destroyed and recreated both textures twice per frame (measured at 123
+// reallocations a second from two ordinary widgets). Keeping a small cache keyed
+// by size lets each object reuse its own pair. Exact sizes are kept rather than
+// rendering into a sub-rectangle of a larger target so the shaders, which
+// sample in [0,1] UV space, stay untouched.
+func (p *painter) targetsFor(w, h int) *effectTargets {
 	ep := &p.effectPipe
-	if ep.width == w && ep.height == h && ep.allocated {
-		return
-	}
+	ep.targetTick++
 
-	// Clean up old resources
-	if ep.allocated {
-		p.ctx.DeleteFramebuffer(ep.fboA)
-		p.ctx.DeleteFramebuffer(ep.fboB)
-		p.ctx.DeleteTexture(ep.texA)
-		p.ctx.DeleteTexture(ep.texB)
-		if ep.msaaSamples > 0 {
-			p.ctx.DeleteFramebuffer(ep.msaaFBO)
-			p.ctx.DeleteRenderbuffer(ep.msaaRBO)
+	for _, t := range ep.targets {
+		if t.width == w && t.height == h {
+			t.lastUsed = ep.targetTick
+			return t
 		}
 	}
 
+	t := p.newEffectTargets(w, h)
+	t.lastUsed = ep.targetTick
+	ep.targets = append(ep.targets, t)
+	p.evictEffectTargets(t)
+	return t
+}
+
+// evictEffectTargets frees least-recently-used targets until the cache is
+// within its count and byte limits. keep is never evicted.
+func (p *painter) evictEffectTargets(keep *effectTargets) {
+	ep := &p.effectPipe
+	for {
+		total := 0
+		for _, t := range ep.targets {
+			total += t.bytes
+		}
+		if len(ep.targets) <= maxEffectTargets && total <= maxEffectTargetsBytes {
+			return
+		}
+
+		oldest := -1
+		for i, t := range ep.targets {
+			if t == keep {
+				continue
+			}
+			if oldest < 0 || t.lastUsed < ep.targets[oldest].lastUsed {
+				oldest = i
+			}
+		}
+		if oldest < 0 {
+			return // only keep is left
+		}
+
+		p.deleteEffectTargets(ep.targets[oldest])
+		ep.targets = append(ep.targets[:oldest], ep.targets[oldest+1:]...)
+	}
+}
+
+func (p *painter) deleteEffectTargets(t *effectTargets) {
+	p.ctx.DeleteFramebuffer(t.fboA)
+	p.ctx.DeleteFramebuffer(t.fboB)
+	p.ctx.DeleteTexture(t.texA)
+	p.ctx.DeleteTexture(t.texB)
+	if t.msaaSamples > 0 {
+		p.ctx.DeleteFramebuffer(t.msaaFBO)
+		p.ctx.DeleteRenderbuffer(t.msaaRBO)
+	}
+}
+
+// newEffectTargets creates the two FBOs and their color textures.
+func (p *painter) newEffectTargets(w, h int) *effectTargets {
+	t := &effectTargets{width: w, height: h, bytes: 2 * w * h * 4}
+
 	// Create two RGBA textures
-	ep.texA = p.newFBOTexture(w, h)
-	ep.texB = p.newFBOTexture(w, h)
+	t.texA = p.newFBOTexture(w, h)
+	t.texB = p.newFBOTexture(w, h)
 
 	// Create and setup FBO A
-	ep.fboA = p.ctx.CreateFramebuffer()
-	p.ctx.BindFramebuffer(glFramebuffer, ep.fboA)
-	p.ctx.FramebufferTexture2D(glFramebuffer, colorAttachment0, texture2D, ep.texA, 0)
+	t.fboA = p.ctx.CreateFramebuffer()
+	p.ctx.BindFramebuffer(glFramebuffer, t.fboA)
+	p.ctx.FramebufferTexture2D(glFramebuffer, colorAttachment0, texture2D, t.texA, 0)
 	status := p.ctx.CheckFramebufferStatus(glFramebuffer)
 	if status != framebufferComplete {
 		fyne.LogError("EffectPipeline: FBO A incomplete", fmt.Errorf("status: 0x%x", status))
 	}
 
 	// Create and setup FBO B
-	ep.fboB = p.ctx.CreateFramebuffer()
-	p.ctx.BindFramebuffer(glFramebuffer, ep.fboB)
-	p.ctx.FramebufferTexture2D(glFramebuffer, colorAttachment0, texture2D, ep.texB, 0)
+	t.fboB = p.ctx.CreateFramebuffer()
+	p.ctx.BindFramebuffer(glFramebuffer, t.fboB)
+	p.ctx.FramebufferTexture2D(glFramebuffer, colorAttachment0, texture2D, t.texB, 0)
 	status = p.ctx.CheckFramebufferStatus(glFramebuffer)
 	if status != framebufferComplete {
 		fyne.LogError("EffectPipeline: FBO B incomplete", fmt.Errorf("status: 0x%x", status))
@@ -144,28 +219,24 @@ func (p *painter) ensureFBOSize(w, h int) {
 	// Create MSAA FBO if hardware multisampling is active
 	if p.aaMode.NeedsMSAA() {
 		samples := int32(p.aaMode.Samples())
-		ep.msaaRBO = p.ctx.CreateRenderbuffer()
-		p.ctx.BindRenderbuffer(glRenderbuffer, ep.msaaRBO)
+		t.msaaRBO = p.ctx.CreateRenderbuffer()
+		p.ctx.BindRenderbuffer(glRenderbuffer, t.msaaRBO)
 		p.ctx.RenderbufferStorageMultisample(glRenderbuffer, samples, colorFormatRGBA, int32(w), int32(h))
 
-		ep.msaaFBO = p.ctx.CreateFramebuffer()
-		p.ctx.BindFramebuffer(glFramebuffer, ep.msaaFBO)
-		p.ctx.FramebufferRenderbuffer(glFramebuffer, colorAttachment0, glRenderbuffer, ep.msaaRBO)
+		t.msaaFBO = p.ctx.CreateFramebuffer()
+		p.ctx.BindFramebuffer(glFramebuffer, t.msaaFBO)
+		p.ctx.FramebufferRenderbuffer(glFramebuffer, colorAttachment0, glRenderbuffer, t.msaaRBO)
 		status = p.ctx.CheckFramebufferStatus(glFramebuffer)
 		if status != framebufferComplete {
 			fyne.LogError("EffectPipeline: MSAA FBO incomplete", fmt.Errorf("status: 0x%x", status))
 		}
-		ep.msaaSamples = int(samples)
-	} else {
-		ep.msaaSamples = 0
+		t.msaaSamples = int(samples)
+		t.bytes += w * h * 4 * int(samples)
 	}
 
 	// Unbind FBO (bind default framebuffer 0)
 	p.bindDefaultFramebuffer()
-
-	ep.width = w
-	ep.height = h
-	ep.allocated = true
+	return t
 }
 
 // bindDefaultFramebuffer binds framebuffer 0 (the screen) in a cross-platform way.
@@ -394,7 +465,7 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 		return
 	}
 
-	p.ensureFBOSize(w, h)
+	t := p.targetsFor(w, h)
 
 	// If this object sits inside a clip region (e.g. a Scrollable), a GL scissor
 	// is currently enabled in WINDOW coordinates. The offscreen passes below draw
@@ -411,22 +482,22 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 
 	// Step 1: Render object into FBO A (via MSAA FBO + resolve if active)
 	fboFrame := fyne.NewSize(objSize.Width, objSize.Height)
-	if ep.msaaSamples > 0 {
+	if t.msaaSamples > 0 {
 		// Render into multisample FBO
-		p.ctx.BindFramebuffer(glFramebuffer, ep.msaaFBO)
+		p.ctx.BindFramebuffer(glFramebuffer, t.msaaFBO)
 		p.ctx.Viewport(0, 0, w, h)
 		p.ctx.ClearColor(0, 0, 0, 0)
 		p.ctx.Clear(bitColorBuffer)
 		p.drawObjectDirect(o, fyne.NewPos(0, 0), fboFrame)
 
 		// Resolve MSAA into fboA (texture-backed) via blit
-		p.ctx.BindFramebuffer(glReadFramebuffer, ep.msaaFBO)
-		p.ctx.BindFramebuffer(glDrawFramebuffer, ep.fboA)
+		p.ctx.BindFramebuffer(glReadFramebuffer, t.msaaFBO)
+		p.ctx.BindFramebuffer(glDrawFramebuffer, t.fboA)
 		p.ctx.BlitFramebuffer(0, 0, int32(w), int32(h), 0, 0, int32(w), int32(h), bitColorBuffer, glLinear)
 		p.ctx.BindFramebuffer(glFramebuffer, noFramebuffer)
 	} else {
 		// No MSAA: render directly into fboA
-		p.ctx.BindFramebuffer(glFramebuffer, ep.fboA)
+		p.ctx.BindFramebuffer(glFramebuffer, t.fboA)
 		p.ctx.Viewport(0, 0, w, h)
 		p.ctx.ClearColor(0, 0, 0, 0)
 		p.ctx.Clear(bitColorBuffer)
@@ -434,8 +505,8 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 	}
 
 	// Step 2: Ping-pong through effect chain
-	srcTex := ep.texA
-	dstTex := ep.texB
+	srcTex := t.texA
+	dstTex := t.texB
 	// useB tracks which FBO is the current destination (true=fboB, false=fboA)
 	useB := true
 
@@ -467,9 +538,9 @@ func (p *painter) drawObjectWithEffects(o fyne.CanvasObject, pos fyne.Position, 
 		passes := effect.PassCount(eff.Type())
 
 		for pass := 0; pass < passes; pass++ {
-			dstFBO := ep.fboA
+			dstFBO := t.fboA
 			if useB {
-				dstFBO = ep.fboB
+				dstFBO = t.fboB
 			}
 
 			p.ctx.BindFramebuffer(glFramebuffer, dstFBO)
