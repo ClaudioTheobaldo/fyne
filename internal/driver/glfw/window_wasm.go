@@ -704,3 +704,7 @@ func (w *wrapInner) updateVisibility() {
 func (w *window) scaleInput(in float64) float64 {
 	return in
 }
+
+const offscreenX, offscreenY = 0, 0
+
+func offscreenWindows() bool { return false }

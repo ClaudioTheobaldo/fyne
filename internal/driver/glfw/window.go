@@ -157,6 +157,9 @@ func (w *window) Show() {
 		if !build.IsWayland && w.centered {
 			w.doCenterOnScreen() // lastly center if that was requested
 		}
+		if !build.IsWayland && offscreenWindows() {
+			view.SetPos(offscreenX, offscreenY)
+		}
 		view.Show()
 
 		// save coordinates

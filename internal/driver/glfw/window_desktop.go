@@ -154,6 +154,10 @@ func (w *window) SetOnDropped(dropped func(pos fyne.Position, items []fyne.URI))
 }
 
 func (w *window) doCenterOnScreen() {
+	if offscreenWindows() {
+		w.viewport.SetPos(offscreenX, offscreenY)
+		return
+	}
 	viewWidth, viewHeight := w.screenSize(w.canvas.size)
 	if w.width > viewWidth { // in case our window has not called back to canvas size yet
 		viewWidth = w.width
@@ -870,4 +874,17 @@ func wrapInnerWindow(*container.InnerWindow, fyne.Window, *gLDriver) fyne.Window
 // desktop.InputInjector does not need the window to be focused.
 func noFocusOnShow() bool {
 	return os.Getenv("FYNE_NO_FOCUS_ON_SHOW") != ""
+}
+
+// Where windows go when FYNE_WINDOW_OFFSCREEN is set: off every monitor, but
+// not at -32000, which Windows uses for minimised windows.
+const offscreenX, offscreenY = -20000, -20000
+
+// offscreenWindows reports whether FYNE_WINDOW_OFFSCREEN is set. Every window
+// is then placed off all monitors before it is shown (and centring keeps it
+// there), so an app driven by automated tests runs, renders and takes injected
+// input without appearing on the user's screen. Pair it with
+// FYNE_NO_FOCUS_ON_SHOW so the windows do not take the keyboard focus either.
+func offscreenWindows() bool {
+	return os.Getenv("FYNE_WINDOW_OFFSCREEN") != ""
 }
